@@ -5,12 +5,23 @@ import { saveToken, saveUser } from "../utils/storage";
 export default function LoginPage({ onLogin, onGoRegister }) {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]       = useState("");
+  const [errors, setErrors]     = useState({});
   const [loading, setLoading]   = useState(false);
+
+  function validate() {
+    const e = {};
+    if (!email.trim()) e.email = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Enter a valid email address";
+    if (!password) e.password = "Password is required";
+    return e;
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
+    setErrors({});
+    const e2 = validate();
+    if (Object.keys(e2).length > 0) { setErrors(e2); return; }
+
     setLoading(true);
     try {
       const data = await loginApi(email, password);
@@ -18,7 +29,7 @@ export default function LoginPage({ onLogin, onGoRegister }) {
       saveUser({ email: data.email, firstname: data.firstname });
       onLogin({ email: data.email, firstname: data.firstname });
     } catch (err) {
-      setError(err.message);
+      setErrors({ general: err.message });
     } finally {
       setLoading(false);
     }
@@ -51,23 +62,33 @@ export default function LoginPage({ onLogin, onGoRegister }) {
           <div className="form-title">Welcome back</div>
           <div className="form-subtitle">Sign in to your HangOut account</div>
 
-          {error && <div className="alert alert-error">{error}</div>}
+          {errors.general && <div className="alert alert-error">{errors.general}</div>}
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
             <div className="field">
               <label>Email</label>
               <input
-                type="email" placeholder="juan@example.com"
-                value={email} onChange={(e) => setEmail(e.target.value)} required
+                type="email"
+                placeholder="juan@example.com"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setErrors((err) => ({ ...err, email: "" })); }}
+                className={errors.email ? "input-error" : email ? "input-success" : ""}
               />
+              {errors.email && <span className="field-error">{errors.email}</span>}
             </div>
+
             <div className="field">
               <label>Password</label>
               <input
-                type="password" placeholder="••••••••"
-                value={password} onChange={(e) => setPassword(e.target.value)} required
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setErrors((err) => ({ ...err, password: "" })); }}
+                className={errors.password ? "input-error" : password ? "input-success" : ""}
               />
+              {errors.password && <span className="field-error">{errors.password}</span>}
             </div>
+
             <button className="btn-primary" type="submit" disabled={loading}>
               {loading ? "Signing in…" : "Sign In →"}
             </button>
