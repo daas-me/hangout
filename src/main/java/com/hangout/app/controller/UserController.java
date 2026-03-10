@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.hangout.app.entity.UserEntity;
+import com.hangout.app.repository.EventRepository;
 import com.hangout.app.repository.UserRepository;
 import com.hangout.app.utils.JwtUtils;
 
@@ -20,6 +21,9 @@ public class UserController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private EventRepository eventRepository;   // ← added for stats
 
     @Autowired
     private JwtUtils jwtUtil;
@@ -40,13 +44,42 @@ public class UserController {
 
         UserEntity user = optUser.get();
         return ResponseEntity.ok(Map.of(
-            "id", user.getId(),
+            "id",        user.getId(),
             "firstname", user.getFirstname(),
-            "lastname", user.getLastname(),
-            "email", user.getEmail(),
-            "age", user.getAge() != null ? user.getAge() : "",
+            "lastname",  user.getLastname(),
+            "email",     user.getEmail(),
+            "age",       user.getAge() != null ? user.getAge() : "",
             "birthdate", user.getBirthdate() != null ? user.getBirthdate().toString() : "",
-            "role", user.getRole()
+            "role",      user.getRole()
+        ));
+    }
+
+    // GET STATS  ← new endpoint
+    @GetMapping("/stats")
+    public ResponseEntity<?> getStats(@RequestHeader("Authorization") String authHeader) {
+        String email = extractEmail(authHeader);
+        Optional<UserEntity> optUser = userRepository.findByEmail(email);
+        if (optUser.isEmpty()) return ResponseEntity.status(404).body(Map.of("message", "User not found"));
+
+        UserEntity user = optUser.get();
+
+        // Events this user is hosting
+        long hostingCount = eventRepository.countByHost(user);
+
+        // Sum of all attendees across hosted events
+        int totalAttendees = eventRepository
+            .findByHostOrderByDateAscStartTimeAsc(user)
+            .stream()
+            .mapToInt(e -> e.getAttendeeCount())
+            .sum();
+
+        // attendingCount requires an attendees/bookings table — placeholder 0 until that is built
+        int attendingCount = 0;
+
+        return ResponseEntity.ok(Map.of(
+            "hostingCount",   hostingCount,
+            "attendingCount", attendingCount,
+            "totalAttendees", totalAttendees
         ));
     }
 
@@ -60,8 +93,8 @@ public class UserController {
 
         UserEntity user = optUser.get();
         if (body.containsKey("firstname")) user.setFirstname(body.get("firstname"));
-        if (body.containsKey("lastname")) user.setLastname(body.get("lastname"));
-        if (body.containsKey("age")) user.setAge(Integer.parseInt(body.get("age")));
+        if (body.containsKey("lastname"))  user.setLastname(body.get("lastname"));
+        if (body.containsKey("age"))       user.setAge(Integer.parseInt(body.get("age")));
         user.setUpdatedAt(LocalDateTime.now());
 
         userRepository.save(user);
@@ -77,9 +110,8 @@ public class UserController {
         if (optUser.isEmpty()) return ResponseEntity.status(404).body(Map.of("message", "User not found"));
 
         UserEntity user = optUser.get();
-        if (!passwordEncoder.matches(body.get("oldPassword"), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(body.get("oldPassword"), user.getPasswordHash()))
             return ResponseEntity.status(401).body(Map.of("message", "Old password is incorrect"));
-        }
 
         user.setPasswordHash(passwordEncoder.encode(body.get("newPassword")));
         user.setUpdatedAt(LocalDateTime.now());

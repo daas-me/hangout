@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { loginApi } from "../api/auth";
 import { saveToken, saveUser } from "../utils/storage";
+import "../styles/global.css";
+import "../styles/auth.css";
 
 export default function LoginPage({ onLogin, onGoRegister }) {
   const [email, setEmail]       = useState("");
@@ -64,16 +66,17 @@ export default function LoginPage({ onLogin, onGoRegister }) {
 
           {errors.general && <div className="alert alert-error">{errors.general}</div>}
 
-          <form onSubmit={handleSubmit} noValidate>
+          <form onSubmit={handleSubmit} noValidate autoComplete="on">
             <div className="field">
               <label>Email</label>
               <input
                 type="email"
-                placeholder="juan@example.com"
+                placeholder="john@example.com"
                 value={email}
+                autoComplete="email"
                 onChange={(e) => { setEmail(e.target.value); setErrors((err) => ({ ...err, email: "" })); }}
                 className={errors.email ? "input-error" : email ? "input-success" : ""}
-              />
+/>
               {errors.email && <span className="field-error">{errors.email}</span>}
             </div>
 
@@ -83,6 +86,7 @@ export default function LoginPage({ onLogin, onGoRegister }) {
                 type="password"
                 placeholder="••••••••"
                 value={password}
+                autoComplete="current-password"
                 onChange={(e) => { setPassword(e.target.value); setErrors((err) => ({ ...err, password: "" })); }}
                 className={errors.password ? "input-error" : password ? "input-success" : ""}
               />
