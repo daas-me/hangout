@@ -1,0 +1,383 @@
+/* DiscoverPage.module.css */
+
+/* ── Page ── */
+.page {
+  min-height: 100vh;
+  background: #0d0d14;
+}
+
+.main {
+  padding: 40px 48px 80px;
+}
+
+/* ── Page title ── */
+.pageTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 3.5rem;
+  font-weight: 700;
+  color: #f0eeff;
+  margin-bottom: 32px;
+}
+
+/* ── Search row ── */
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 650px;
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.searchWrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  background-color: #13131F; 
+  border: 1px solid #2a2a3d;
+  border-radius: 12px;
+  padding: 0 16px;
+  height: 68px;
+}
+
+.searchIcon {
+  width: 20px;
+  height: 20px;
+  color: #8882AA;
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: white;
+  font-size: 16px;
+}
+
+.searchInput::placeholder {
+  color: #8882AA;
+  font-size: 18px;
+}
+
+.filterBtn {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7C3AED, #E040FB); 
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.filterIcon {
+  width: 20px;
+  height: 20px;
+  color: white;
+}
+
+/* ── Filter pills ── */
+.pills {
+  display: flex;
+  gap: 11px;
+  flex-wrap: wrap;
+  margin-bottom: 36px;
+}
+
+.pill {
+  padding: 14px 26px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #8882aa;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.pill:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #f0eeff;
+}
+
+.pillActive {
+  padding: 14px 26px;
+  border-radius: 9999px;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed 0%, #e040fb 100%);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: white;
+  cursor: pointer;
+}
+
+/* ── Event grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+/* ── Skeleton ── */
+.skeleton {
+  height: 380px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── Empty / Error ── */
+.emptyState {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 80px 0;
+  text-align: center;
+}
+
+.errorState { color: #fca5a5; }
+
+/* ── Card ── */
+.card {
+  background: #13131f;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Card image ── */
+.cardImgWrap {
+  position: relative;
+  height: 200px;
+  flex-shrink: 0;
+}
+
+.cardImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.formatBadge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #7c3aed 0%, #e040fb 100%);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: white;
+}
+
+.cardImgDefault {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #1a0a3d 0%, #4c1d95 40%, #7c3aed 70%, #e040fb 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cardImgDefaultText {
+  font-family: 'Syne', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.2);
+  text-align: center;
+  padding: 0 16px;
+}
+
+/* ── Card body ── */
+.cardBody {
+  padding: 20px 20px 12px;
+  flex: 1;
+}
+
+.cardTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f0eeff;
+  margin-bottom: 14px;
+  line-height: 1.35;
+}
+
+.cardMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  color: #8882aa;
+}
+
+.metaIcon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #8882aa;
+}
+
+/* ── Card footer ── */
+.cardFooter {
+  padding: 14px 20px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.priceFree {
+  font-family: 'Syne', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #22c55e;
+}
+
+.pricePaid {
+  font-family: 'Syne', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f0eeff;
+}
+
+.viewBtn {
+  background: none;
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #a855f7;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+.viewBtn:hover { color: #c27aff; }
+
+
+.emptyIconWrap {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(168, 85, 247, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.emptyTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f0eeff;
+}
+
+.emptySub {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  color: #8882aa;
+  max-width: 320px;
+  line-height: 1.6;
+}
+
+
+/* Skeleton card */
+.skeletonCard {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  background: #13131f;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  overflow: hidden;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skeletonImg {
+  width: 100%;
+  min-height: 260px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.skeletonDetails {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.skeletonLine {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  flex: 1;
+}
+
+.skeletonItem {
+  height: 60px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.skeletonActions {
+  display: flex;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: auto;
+}
+
+.skeletonBtn {
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.skeletonBtnSm {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}

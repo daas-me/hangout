@@ -1,0 +1,642 @@
+/* MyHangOutsPage.module.css */
+
+/* ── Page ── */
+.page {
+  min-height: 100vh;
+  background: #0d0d14;
+}
+
+.main {
+  padding: 48px 48px 80px;
+}
+
+/* ── Title ── */
+.pageTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 3.5rem;
+  font-weight: 600;
+  color: #f0eeff;
+  margin-bottom: 32px;
+}
+
+/* ── Search ── */
+.searchWrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 680px;
+  background: #13131f;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 32px;
+}
+
+.searchIcon {
+  width: 18px;
+  height: 18px;
+  color: #8882aa;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.05rem;
+  color: #f0eeff;
+}
+
+.searchInput::placeholder { color: #8882aa; }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.tab {
+  padding: 14px 28px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #13131f;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #8882aa;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.tab:hover { color: #f0eeff; border-color: rgba(255,255,255,0.2); }
+
+.tabActive {
+  padding: 14px 28px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed 0%, #e040fb 100%);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+}
+
+/* ── List ── */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Card ── */
+.card {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  background: #13131f;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.cardGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Card image ── */
+.imgWrap {
+  position: relative;
+  height: 100%;
+  min-height: 260px;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.imgDefault {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #1a0a3d 0%, #4c1d95 40%, #7c3aed 70%, #e040fb 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imgDefaultText {
+  font-family: 'Syne', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.2);
+  text-align: center;
+  padding: 0 16px;
+}
+
+.formatBadge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #7c3aed 0%, #e040fb 100%);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+}
+
+/* ── Draft card — subtle amber border ── */
+.cardDraft {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* ── Draft image dimming overlay ── */
+.draftImgOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 13, 20, 0.35);
+  pointer-events: none;
+}
+
+/* ── Draft badge — inline next to title ── */
+.cardTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.draftBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #f59e0b;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.draftDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.8);
+  animation: draftPulse 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes draftPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+.confirmedBadge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  background: #10b981;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+}
+
+/* ── Card details ── */
+.details {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cardTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #f0eeff;
+  line-height: 1.25;
+}
+
+/* ── Info grid ── */
+.infoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  flex: 1;
+}
+
+.infoItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.infoIconBox {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(124, 58, 237, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.infoIcon {
+  width: 20px;
+  height: 20px;
+  color: #9d5ff5;
+}
+
+.infoLabel {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  color: #8882aa;
+  margin-bottom: 3px;
+}
+
+.infoValue {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #f0eeff;
+}
+
+.infoValuePrice {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #f0eeff;
+}
+
+/* ── Ticket boxes (seat + ticket #) ── */
+.ticketBox {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.ticketLabel {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  color: #9d5ff5;
+  margin-bottom: 6px;
+}
+
+.ticketSeat {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #f0eeff;
+}
+
+.ticketNum {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #f0eeff;
+}
+
+/* ── Action row ── */
+.actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: auto;
+}
+
+.btnManage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btnManage:hover { opacity: 0.9; }
+
+.btnEdit {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  border: none;
+  background: #1e1e30;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #f0eeff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btnEdit:hover { background: #252540; }
+
+.btnDelete {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.btnDelete:hover { background: rgba(239, 68, 68, 0.2); }
+
+.btnIcon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: none;
+  background: #1e1e30;
+  color: #f0eeff;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.btnIcon:hover { background: #252540; }
+
+.btnFav {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  border: none;
+  background: #1e1e30;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #f0eeff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btnFav:hover { background: #252540; }
+
+/* ── E-Ticket ── */
+.eticket {
+  position: relative;
+  padding: 36px;
+  border-radius: 16px;
+  border: 2px solid rgba(124, 58, 237, 0.5);
+  background: #13131f;
+  overflow: hidden;
+}
+
+.eticketPattern {
+  position: absolute;
+  inset: 0;
+  opacity: 0.04;
+  background-image: repeating-linear-gradient(
+    45deg,
+    #7c3aed 0,
+    #7c3aed 1px,
+    transparent 0,
+    transparent 50%
+  );
+  background-size: 10px 10px;
+  pointer-events: none;
+}
+
+.eticketInner {
+  position: relative;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 40px;
+  align-items: start;
+}
+
+.qrWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.qrBox {
+  width: 200px;
+  height: 200px;
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+}
+
+.qrHint {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  color: #8882aa;
+  text-align: center;
+}
+
+.eticketInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.eticketTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #7c3aed 0%, #e040fb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+}
+
+.eticketSub {
+  font-family: 'DM Sans', sans-serif;
+  color: #8882aa;
+  margin-top: -14px;
+}
+
+.eticketGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+
+.etSpan { grid-column: 1 / -1; }
+
+.etLabel {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9d5ff5;
+  margin-bottom: 4px;
+}
+
+.etValue {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f0eeff;
+}
+
+.eticketWarning {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  color: #8882aa;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Empty state ── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 0;
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(124, 58, 237, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.emptyTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f0eeff;
+  margin-bottom: 8px;
+}
+
+.emptySub {
+  font-family: 'DM Sans', sans-serif;
+  color: #8882aa;
+  margin-bottom: 24px;
+}
+
+.emptyBtn {
+  padding: 14px 32px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed 0%, #e040fb 100%);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 1rem;
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.emptyBtn:hover { opacity: 0.9; }
+
+/* ── Skeletons ── */
+.skeletonCard {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  background: #13131f;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  overflow: hidden;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skeletonImg {
+  width: 100%;
+  min-height: 260px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.skeletonDetails {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.skeletonLine {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  flex: 1;
+}
+
+.skeletonItem {
+  height: 60px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.skeletonActions {
+  display: flex;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: auto;
+}
+
+.skeletonBtn {
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.skeletonBtnSm {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}

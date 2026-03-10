@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { registerApi } from "../api/auth";
+import "../styles/global.css";
+import "../styles/auth.css";
 
 const today = new Date().toISOString().split("T")[0];
 
