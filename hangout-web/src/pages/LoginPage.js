@@ -5,10 +5,10 @@ import "../styles/global.css";
 import "../styles/auth.css";
 
 export default function LoginPage({ onLogin, onGoRegister }) {
-  const [email, setEmail]       = useState("");
+  const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors]     = useState({});
-  const [loading, setLoading]   = useState(false);
+  const [errors,   setErrors]   = useState({});
+  const [loading,  setLoading]  = useState(false);
 
   function validate() {
     const e = {};
@@ -29,6 +29,17 @@ export default function LoginPage({ onLogin, onGoRegister }) {
       const data = await loginApi(email, password);
       saveToken(data.token);
       saveUser({ email: data.email, firstname: data.firstname });
+
+      // Ask the browser to save / update the credentials for this site
+      if (window.PasswordCredential) {
+        try {
+          const cred = new window.PasswordCredential({ id: email, password });
+          await navigator.credentials.store(cred);
+        } catch (_) {
+          // Non-fatal — browser may silently decline
+        }
+      }
+
       onLogin({ email: data.email, firstname: data.firstname });
     } catch (err) {
       setErrors({ general: err.message });
@@ -68,26 +79,30 @@ export default function LoginPage({ onLogin, onGoRegister }) {
 
           <form onSubmit={handleSubmit} noValidate autoComplete="on">
             <div className="field">
-              <label>Email</label>
+              <label htmlFor="login-email">Email</label>
               <input
+                id="login-email"
+                name="email"
                 type="email"
-                placeholder="john@example.com"
+                placeholder="juan@example.com"
                 value={email}
                 autoComplete="email"
-                onChange={(e) => { setEmail(e.target.value); setErrors((err) => ({ ...err, email: "" })); }}
+                onChange={(e) => { setEmail(e.target.value); setErrors(err => ({ ...err, email: "" })); }}
                 className={errors.email ? "input-error" : email ? "input-success" : ""}
-/>
+              />
               {errors.email && <span className="field-error">{errors.email}</span>}
             </div>
 
             <div className="field">
-              <label>Password</label>
+              <label htmlFor="login-password">Password</label>
               <input
+                id="login-password"
+                name="password"
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 autoComplete="current-password"
-                onChange={(e) => { setPassword(e.target.value); setErrors((err) => ({ ...err, password: "" })); }}
+                onChange={(e) => { setPassword(e.target.value); setErrors(err => ({ ...err, password: "" })); }}
                 className={errors.password ? "input-error" : password ? "input-success" : ""}
               />
               {errors.password && <span className="field-error">{errors.password}</span>}

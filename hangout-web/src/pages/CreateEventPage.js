@@ -37,7 +37,7 @@ function eventToForm(event) {
       const mm   = String(d.getMonth() + 1).padStart(2, '0');
       const dd   = String(d.getDate()).padStart(2, '0');
       const yyyy = d.getFullYear();
-      date = `${yyyy}-${mm}-${dd}`;
+      date = `${mm}/${dd}/${yyyy}`;
     } else {
       date = event.date;
     }
@@ -78,7 +78,8 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
   const [preview,      setPreview]      = useState(false);
   const [publishing,   setPublishing]   = useState(false);
   const [errors,       setErrors]       = useState({});
-  const fileRef = useRef();
+  const fileRef      = useRef();
+  const datePickerRef = useRef();
 
   const set = (k, v) => {
     setForm(f => ({ ...f, [k]: v }));
@@ -101,7 +102,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
   function validate() {
     const e = {};
     if (!form.title.trim())               e.title     = 'Event title is required.';
-    if (!form.date) e.date = 'Date is required.';
+    if (!form.date || toIsoDate(form.date).length < 10) e.date = 'Date is required.';
     if (!form.startTime)                  e.startTime = 'Start time is required.';
     if (form.format !== 'virtual' && !form.location.trim()) e.location = 'Location is required.';
     if (form.eventType === 'paid' && !form.price) e.price = 'Ticket price is required for paid events.';
@@ -109,8 +110,45 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
   }
 
   function toIsoDate(dateStr) {
-    // Native date input already returns YYYY-MM-DD
-    return dateStr;
+    // Accepts YYYY-MM-DD (from picker) or MM/DD/YYYY (from typed input)
+    if (!dateStr) return '';
+    if (dateStr.includes('/')) {
+      const [mm, dd, yyyy] = dateStr.split('/');
+      if (!mm || !dd || !yyyy || yyyy.length < 4) return '';
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return dateStr; // already YYYY-MM-DD
+  }
+
+  function toDisplayDate(isoOrMasked) {
+    if (!isoOrMasked) return '';
+    // If already MM/DD/YYYY return as-is
+    if (isoOrMasked.includes('/')) return isoOrMasked;
+    // Convert YYYY-MM-DD → MM/DD/YYYY for display
+    const [yyyy, mm, dd] = isoOrMasked.split('-');
+    return `${mm}/${dd}/${yyyy}`;
+  }
+
+  function handleDateInput(e) {
+    let v = e.target.value.replace(/\D/g, '');
+    if (v.length >= 3) v = v.slice(0, 2) + '/' + v.slice(2);
+    if (v.length >= 6) v = v.slice(0, 5) + '/' + v.slice(5);
+    v = v.slice(0, 10);
+    // Block past dates while typing
+    if (v.length === 10) {
+      const iso  = toIsoDate(v);
+      const date = iso ? new Date(iso + 'T00:00:00') : null;
+      const today = new Date(); today.setHours(0,0,0,0);
+      if (date && date < today) return;
+    }
+    set('date', v);
+  }
+
+  function handleDatePicker(e) {
+    const iso = e.target.value; // YYYY-MM-DD
+    if (!iso) return;
+    const [yyyy, mm, dd] = iso.split('-');
+    set('date', `${mm}/${dd}/${yyyy}`);
   }
 
   function buildPayload(isDraft = false) {
@@ -136,30 +174,24 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
     };
   }
 
-    function buildOptimistic(isDraft = false) {
+  function buildOptimistic(isDraft = false) {
     return {
-        id:              initialEvent?.id || Date.now(),
-        title:           form.title,
-        _rawDate:        toIsoDate(form.date),
-        date:            new Date(toIsoDate(form.date)).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-        time:            form.startTime,
-        location:        form.format !== 'virtual' ? form.location : 'Virtual',
-        placeUrl:        form.placeUrl || null,
-        format:          form.format === 'in-person' ? 'In-Person' : form.format === 'virtual' ? 'Virtual' : 'Hybrid',
-        price:           form.eventType === 'free' ? 0 : Number(form.price) || 0,
-        capacity:        Number(form.maxAttendees) || 100,
-        attendees:       { current: 0, max: Number(form.maxAttendees) || 100 },
-        imageUrl:        coverImage || null,
-        seatingType:     form.seatingType,
-        description:     form.description,
-        paymentMethod:   form.paymentMethod,    // ← add
-        accountNumber:   form.accountNumber,    // ← add
-        eventType:       form.eventType,        // ← add
-        virtualPlatform: form.virtualPlatform,  // ← add
-        virtualLink:     form.virtualLink,      // ← add
-        isDraft,
+      id:          initialEvent?.id || Date.now(),
+      title:       form.title,
+      _rawDate:    toIsoDate(form.date),
+      date:        new Date(toIsoDate(form.date)).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+      time:        form.startTime,
+      location:    form.format !== 'virtual' ? form.location : 'Virtual',
+      format:      form.format === 'in-person' ? 'In-Person' : form.format === 'virtual' ? 'Virtual' : 'Hybrid',
+      price:       form.eventType === 'free' ? 0 : Number(form.price) || 0,
+      capacity:    Number(form.maxAttendees) || 100,
+      attendees:   { current: 0, max: Number(form.maxAttendees) || 100 },
+      imageUrl:    coverImage || null,
+      seatingType: form.seatingType,
+      description: form.description,
+      isDraft,
     };
-    }
+  }
 
   const handlePreview = () => {
     const e = validate();
@@ -210,6 +242,10 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
       setPublishing(false);
     }
   };
+
+  // Derive ISO string from form.date (which may be MM/DD/YYYY or YYYY-MM-DD)
+  const dateISO = form.date ? toIsoDate(form.date) : '';
+  const todayISO = new Date().toISOString().split('T')[0];
 
   if (preview) {
     return (
@@ -277,13 +313,49 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
 
             <div className={s.fieldGroup}>
               <label className={s.fieldLabel}><Calendar size={16} className={s.fieldIcon} /> DATE & TIME</label>
-              <input
-                className={`${s.input} ${errors.date ? s.inputError : form.date ? s.inputSuccess : ''}`}
-                type="date"
-                min={new Date().toISOString().split('T')[0]}
-                value={form.date}
-                onChange={e => set('date', e.target.value)}
-              />
+              <div style={{ position: 'relative' }}>
+                {/* Typeable masked input */}
+                <input
+                  className={`${s.input} ${errors.date ? s.inputError : form.date ? s.inputSuccess : ''}`}
+                  type="text"
+                  placeholder="MM/DD/YYYY"
+                  maxLength={10}
+                  value={toDisplayDate(form.date)}
+                  onChange={handleDateInput}
+                  style={{ paddingRight: 44 }}
+                />
+                {/* Calendar icon — opens picker via showPicker() */}
+                <button
+                  type="button"
+                  onClick={() => datePickerRef.current?.showPicker()}
+                  style={{
+                    position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', padding: 4, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', color: '#8882aa',
+                    borderRadius: 6, transition: 'color 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#a855f7'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#8882aa'}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8"  y1="2" x2="8"  y2="6"/>
+                    <line x1="3"  y1="10" x2="21" y2="10"/>
+                  </svg>
+                </button>
+                {/* Hidden date picker — triggered only by icon click */}
+                <input
+                  ref={datePickerRef}
+                  type="date"
+                  min={todayISO}
+                  value={dateISO}
+                  onChange={handleDatePicker}
+                  style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+                  tabIndex={-1}
+                />
+              </div>
               {errors.date && <span className={s.fieldError}>{errors.date}</span>}
               <div className={s.timeRow}>
                 <div style={{ flex: 1 }}>
@@ -490,18 +562,16 @@ function PreviewPage({ form, coverImage, user, isEditing, onBack, onSaveDraft, o
                 <div>
                   <p className={s.pvCardLabel}>Location</p>
                   <p className={s.pvCardValue}>{form.location || 'Not set'}</p>
-                    <a href={form.placeUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.location)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={s.pvMapLink}
-                        >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                            <polyline points="15 3 21 3 21 9"/>
-                            <line x1="10" y1="14" x2="21" y2="3"/>
-                        </svg>
-                        Open in Maps
+                  {form.placeUrl && (
+                    <a href={form.placeUrl} target="_blank" rel="noreferrer" className={s.pvMapLink}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                      </svg>
+                      Open in Maps
                     </a>
+                  )}
                 </div>
               </div>
             )}
@@ -555,23 +625,16 @@ function PreviewPage({ form, coverImage, user, isEditing, onBack, onSaveDraft, o
             {form.eventType === 'paid' && (
               <div className={s.pvPaymentCard}>
                 <div className={s.pvPaymentTitle}>
-                    <CreditCard size={16} className={s.pvCardIcon} style={{ flexShrink: 0 }} />
-                    <p className={s.pvSectionTitle} style={{ margin: 0 }}>Payment Details</p>
+                  <CreditCard size={16} className={s.pvCardIcon} />
+                  <p className={s.pvSectionTitle}>Payment Details</p>
                 </div>
                 <div className={s.pvPaymentRow}>
-                    <p className={s.pvCardLabel}>Payment Method</p>
-                    <p className={s.pvCardValue}>
-                    {form.paymentMethod === 'gcash'   ? 'GCash'
-                    : form.paymentMethod === 'paymaya' ? 'PayMaya'
-                    : form.paymentMethod === 'bank'    ? 'Bank Transfer'
-                    : form.paymentMethod.charAt(0).toUpperCase() + form.paymentMethod.slice(1)}
-                    </p>
+                  <p className={s.pvCardLabel}>Payment Method</p>
+                  <p className={s.pvCardValue}>{form.paymentMethod.charAt(0).toUpperCase() + form.paymentMethod.slice(1)}</p>
                 </div>
-               <div className={s.pvPaymentRow}>
-                    <p className={s.pvCardLabel}>Account Number</p>
-                    <p className={s.pvCardValue} style={{ fontFamily: "'DM Mono', 'Courier New', monospace", letterSpacing: '0.05em' }}>
-                    {form.accountNumber || '—'}
-                    </p>
+                <div className={s.pvPaymentRow}>
+                  <p className={s.pvCardLabel}>Account Number</p>
+                  <p className={s.pvCardValue}>{form.accountNumber || '—'}</p>
                 </div>
                 <p className={s.pvPaymentNote}>After payment, you'll be asked to upload proof of payment for host approval.</p>
               </div>
@@ -619,7 +682,7 @@ function LocationPicker({ value, error, onChange }) {
       a?.city || a?.town || a?.municipality,
       a?.province || a?.state,
     ].filter(Boolean).join(', ');
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+    const url = `https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lon}#map=16/${place.lat}/${place.lon}`;
     setQuery(name);
     onChange(name, url);
     setSuggestions([]);
@@ -689,4 +752,4 @@ function LocationPicker({ value, error, onChange }) {
       )}
     </div>
   );
-}
+} 
