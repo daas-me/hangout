@@ -1,6 +1,6 @@
 import { getAuthHeaders } from './auth';
 
-const API_BASE = 'http://localhost:8081/api';
+const API_BASE = 'http://localhost:8080/api';
 
 export async function getDiscoverEvents({ search = '', filter = 'all' } = {}) {
   const params = new URLSearchParams();

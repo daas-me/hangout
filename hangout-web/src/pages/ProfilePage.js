@@ -1,455 +1,575 @@
 import { useState, useRef, useEffect } from 'react';
 import { Navbar } from '../components/Navbar';
 import {
-  User, Mail, Lock, Camera, LogOut, Save,
-  Eye, EyeOff, CheckCircle, AlertCircle
+  Camera, Calendar, Users, TrendingUp, ChevronRight,
+  User, Bell, Mail, Settings, LogOut, HelpCircle,
+  Phone, MapPin, CheckCircle2, CreditCard, IdCard,
+  Lock, Save, CheckCircle, AlertCircle, X, Trash2, Upload
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8081/api';
+const API_BASE = 'http://localhost:8080/api';
+
+const cardStyle = {
+  background: 'rgba(30, 32, 60, 0.5)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 16,
+};
+
+const infoBox = {
+  display: 'flex', alignItems: 'center', gap: 12,
+  padding: '14px 16px', borderRadius: 12,
+  background: 'rgba(0,0,0,0.2)',
+};
+
+function Modal({ show, onClose, title, children }) {
+  if (!show) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ ...cardStyle, width: '100%', maxWidth: 500, padding: 32, position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.3rem', fontWeight: 700, color: 'white', margin: 0 }}>{title}</h3>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#9ca3af', cursor: 'pointer', padding: '6px', display: 'flex' }}>
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SettingsBtn({ icon: Icon, label, sub, onClick }) {
+  return (
+    <button onClick={onClick}
+      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: 'transparent', border: 'none', cursor: onClick ? 'pointer' : 'default', transition: 'background 0.2s' }}
+      onMouseEnter={e => { if (onClick) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ padding: 10, borderRadius: 12, background: 'linear-gradient(135deg, #A855F7 0%, #EC4899 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon size={18} color="white" />
+        </div>
+        <div style={{ textAlign: 'left' }}>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: 'white', margin: 0, fontSize: '0.95rem' }}>{label}</p>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.82rem' }}>{sub}</p>
+        </div>
+      </div>
+      <ChevronRight size={18} color="#9ca3af" />
+    </button>
+  );
+}
+
+function Alert({ msg }) {
+  if (!msg) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, marginBottom: 16, fontFamily: "'DM Sans',sans-serif", fontSize: '0.85rem', background: msg.type === 'success' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', border: `1px solid ${msg.type === 'success' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, color: msg.type === 'success' ? '#4ade80' : '#f87171' }}>
+      {msg.type === 'success' ? <CheckCircle size={15} /> : <AlertCircle size={15} />}{msg.text}
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, type = 'text', placeholder, error, success, rightSlot, disabled }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.88rem', color: '#c4c0dd', fontWeight: 500 }}>{label}</label>
+      <div style={{ position: 'relative' }}>
+        <input
+          type={type}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          style={{
+            opacity: disabled ? 0.4 : 1,
+            cursor: disabled ? 'not-allowed' : 'text',
+            width: '100%',
+            background: '#1a1a2e',
+            border: `1.5px solid ${error ? '#f87171' : success ? '#4ade80' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: 10,
+            padding: rightSlot ? '13px 46px 13px 16px' : '13px 16px',
+            color: 'white',
+            fontFamily: "'DM Sans',sans-serif",
+            fontSize: '0.92rem',
+            outline: 'none',
+            boxSizing: 'border-box',
+            transition: 'border-color 0.2s',
+            boxShadow: error ? '0 0 0 3px rgba(248,113,113,0.12)' : success ? '0 0 0 3px rgba(74,222,128,0.12)' : 'none',
+          }}
+          onFocus={e => { if (!error && !success && !disabled) e.target.style.borderColor = 'rgba(168,85,247,0.6)'; }}
+          onBlur={e => { if (!error && !success) e.target.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+        />
+        {rightSlot && (
+          <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }}>
+            {rightSlot}
+          </div>
+        )}
+      </div>
+      {error && <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.78rem', color: '#f87171' }}>{error}</span>}
+    </div>
+  );
+}
 
 export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated }) {
-  const [profile, setProfile] = useState({
-    firstname: user?.firstname || '',
-    lastname:  user?.lastname  || '',
-    email:     user?.email     || '',
-  });
-  const [photo,         setPhoto]         = useState(null);
-  const [passwords,     setPasswords]     = useState({ old: '', newPass: '', confirm: '' });
-  const [showPw,        setShowPw]        = useState({ old: false, newPass: false, confirm: false });
-  const [profileMsg,    setProfileMsg]    = useState(null);
-  const [passwordMsg,   setPasswordMsg]   = useState(null);
-  const [photoMsg,      setPhotoMsg]      = useState(null);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingPw,      setSavingPw]      = useState(false);
-  const [uploadingPhoto,setUploadingPhoto]= useState(false);
-  const [editingInfo,   setEditingInfo]   = useState(false);
-  const [editingPw,     setEditingPw]     = useState(false);
+  const [profile, setProfile]   = useState({ firstname: user?.firstname || '', lastname: user?.lastname || '', email: user?.email || '' });
+  const [photo, setPhoto]       = useState(null);
+  const [stats, setStats]       = useState({ hostingCount: 0, attendingCount: 0, totalAttendees: 0 });
+
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editForm, setEditForm]               = useState({ firstname: '', lastname: '' });
+  const [editErrors, setEditErrors]           = useState({});
+  const [profileMsg, setProfileMsg]           = useState(null);
+  const [savingProfile, setSavingProfile]     = useState(false);
+
+  // Photo state inside edit modal
+  const [editPhoto, setEditPhoto]           = useState(null); // local preview in modal
+  const [photoAction, setPhotoAction]       = useState(null); // 'upload' | 'remove' | null
+  const [photoFile, setPhotoFile]           = useState(null);
+  const [photoMsg, setPhotoMsg]             = useState(null);
+
+  const [showChangePw, setShowChangePw]   = useState(false);
+  const [passwords, setPasswords]         = useState({ old: '', newPass: '', confirm: '' });
+  const [showPw, setShowPw]               = useState({ old: false, newPass: false, confirm: false });
+  const [pwErrors, setPwErrors]           = useState({});
+  const [passwordMsg, setPasswordMsg]     = useState(null);
+  const [savingPw, setSavingPw]           = useState(false);
+
   const fileRef = useRef();
-
   const token = () => localStorage.getItem('hangout_token');
+  const initials = ((profile.firstname?.[0] || '') + (profile.lastname?.[0] || '')).toUpperCase() || 'YO';
+  const fullName = `${profile.firstname} ${profile.lastname}`.trim();
 
-  // Load full profile on mount to get lastname etc.
   useEffect(() => {
     const t = token();
-    fetch(`${API_BASE}/user/profile`, {
-      headers: { Authorization: `Bearer ${token()}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        setProfile({
-          firstname: data.firstname || '',
-          lastname:  data.lastname  || '',
-          email:     data.email     || '',
-        });
-      })
-      .catch(() => {});
-        // Load photo
-    fetch(`${API_BASE}/user/photo`, {
-        headers: { Authorization: `Bearer ${t}` }
-    })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => { if (data?.photo) setPhoto(data.photo); })
-        .catch(() => {});
-
+    fetch(`${API_BASE}/user/profile`, { headers: { Authorization: `Bearer ${t}` } })
+      .then(r => r.json()).then(d => {
+        setProfile({ firstname: d.firstname || '', lastname: d.lastname || '', email: d.email || '' });
+        setEditForm({ firstname: d.firstname || '', lastname: d.lastname || '' });
+      }).catch(() => {});
+    fetch(`${API_BASE}/user/photo`, { headers: { Authorization: `Bearer ${t}` } })
+      .then(r => r.ok ? r.json() : null).then(d => { if (d?.photo) setPhoto(d.photo); }).catch(() => {});
+    fetch(`${API_BASE}/user/stats`, { headers: { Authorization: `Bearer ${t}` } })
+      .then(r => r.json()).then(d => setStats(d)).catch(() => {});
   }, []);
 
-  const initials = ((profile.firstname?.[0] || '') + (profile.lastname?.[0] || '')).toUpperCase() || 'YO';
-
-  // ── Photo upload ──
-  const handlePhotoChange = async (e) => {
+  const handlePhotoFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setPhotoMsg({ type: 'error', text: 'Photo must be under 2MB.' });
-      return;
-    }
-    // Preview locally
-    const reader = new FileReader();
-    reader.onloadend = () => {
-    setPhoto(reader.result);
-    // store for upload callback
-    fileRef._preview = reader.result;
-};
-    reader.readAsDataURL(file);
-
-    // Upload to backend
-    setUploadingPhoto(true);
+    if (file.size > 2 * 1024 * 1024) { setPhotoMsg({ type: 'error', text: 'Photo must be under 2MB.' }); return; }
     setPhotoMsg(null);
-    try {
-      const formData = new FormData();
-      formData.append('photo', file);
-      const res = await fetch(`${API_BASE}/user/photo`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token()}` },
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Upload failed');
-      setPhotoMsg({ type: 'success', text: 'Photo updated!' });
-      onUserUpdated?.({ ...user, photoUrl: fileRef._preview });
-      onUserUpdated?.({ ...user, photoUrl: reader.result });
-    } catch (err) {
-      setPhotoMsg({ type: 'error', text: err.message });
-    } finally {
-      setUploadingPhoto(false);
-    }
+    setPhotoFile(file);
+    setPhotoAction('upload');
+    const reader = new FileReader();
+    reader.onloadend = () => setEditPhoto(reader.result);
+    reader.readAsDataURL(file);
   };
 
-
-  // ── Save profile ──
-  const handleSaveProfile = async () => {
-    if (!profile.firstname.trim()) {
-      setProfileMsg({ type: 'error', text: 'First name is required.' });
-      return;
-    }
-    setSavingProfile(true);
+  const openEditProfile = () => {
+    setEditForm({ firstname: profile.firstname, lastname: profile.lastname });
+    setEditErrors({});
     setProfileMsg(null);
+    setPhotoMsg(null);
+    setEditPhoto(photo); // start with current photo
+    setPhotoAction(null);
+    setPhotoFile(null);
+    setShowEditProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    const e = {};
+    if (!editForm.firstname.trim()) e.firstname = 'First name is required.';
+    if (Object.keys(e).length) { setEditErrors(e); return; }
+    setSavingProfile(true); setProfileMsg(null);
     try {
+      // 1. Save name
       const res = await fetch(`${API_BASE}/user/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ firstname: profile.firstname, lastname: profile.lastname }),
+        body: JSON.stringify({ firstname: editForm.firstname, lastname: editForm.lastname }),
       });
-      const text = await res.text();
-      const data = text ? JSON.parse(text) : {};
-      if (!res.ok) throw new Error(data.message || 'Failed to update profile');
-      setProfileMsg({ type: 'success', text: 'Profile updated successfully!' });
-      setEditingInfo(false);
-      onUserUpdated?.({ ...user, firstname: profile.firstname, lastname: profile.lastname });
-    } catch (err) {
-      setProfileMsg({ type: 'error', text: err.message });
-    } finally {
-      setSavingProfile(false);
-    }
+      const text = await res.text(); const data = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(data.message || 'Failed to update');
+
+      // 2. Handle photo changes
+      if (photoAction === 'upload' && photoFile) {
+        const fd = new FormData(); fd.append('photo', photoFile);
+        await fetch(`${API_BASE}/user/photo`, { method: 'POST', headers: { Authorization: `Bearer ${token()}` }, body: fd });
+        setPhoto(editPhoto);
+        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: editPhoto });
+      } else if (photoAction === 'remove') {
+        await fetch(`${API_BASE}/user/photo`, { method: 'DELETE', headers: { Authorization: `Bearer ${token()}` } });
+        setPhoto(null);
+        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: null });
+      } else {
+        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname });
+      }
+
+      setProfile(p => ({ ...p, firstname: editForm.firstname, lastname: editForm.lastname }));
+      setProfileMsg({ type: 'success', text: 'Profile updated!' });
+      setTimeout(() => { setShowEditProfile(false); setProfileMsg(null); }, 1200);
+    } catch (err) { setProfileMsg({ type: 'error', text: err.message }); }
+    finally { setSavingProfile(false); }
   };
 
-  // ── Save password ──
-  const handleSavePassword = async () => {
+  const openChangePw = () => {
+    setPasswords({ old: '', newPass: '', confirm: '' });
+    setPwErrors({});
     setPasswordMsg(null);
-    if (!passwords.old)              { setPasswordMsg({ type: 'error', text: 'Current password is required.' }); return; }
-    if (passwords.newPass.length < 6){ setPasswordMsg({ type: 'error', text: 'New password must be at least 6 characters.' }); return; }
-    if (passwords.newPass !== passwords.confirm) { setPasswordMsg({ type: 'error', text: 'Passwords do not match.' }); return; }
-    setSavingPw(true);
+    setShowChangePw(true);
+  };
+
+  const handleSavePassword = async () => {
+    const e = {};
+    if (!passwords.old)               e.old     = 'Current password is required.';
+    if (passwords.newPass.length < 6) e.newPass = 'Minimum 6 characters.';
+    if (passwords.newPass !== passwords.confirm) e.confirm = 'Passwords do not match.';
+    if (Object.keys(e).length) { setPwErrors(e); return; }
+    setSavingPw(true); setPasswordMsg(null);
     try {
       const res = await fetch(`${API_BASE}/user/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ oldPassword: passwords.old, newPassword: passwords.newPass }),
       });
-      const text = await res.text();
-      const data = text ? JSON.parse(text) : {};
+      const text = await res.text(); const data = text ? JSON.parse(text) : {};
       if (!res.ok) throw new Error(data.message || 'Failed to update password');
-      setPasswordMsg({ type: 'success', text: 'Password changed successfully!' });
-      setPasswords({ old: '', newPass: '', confirm: '' });
-      setEditingPw(false);
-    } catch (err) {
-      setPasswordMsg({ type: 'error', text: err.message });
-    } finally {
-      setSavingPw(false);
-    }
+      setPasswordMsg({ type: 'success', text: 'Password changed!' });
+      setTimeout(() => { setShowChangePw(false); setPasswordMsg(null); }, 1200);
+    } catch (err) { setPasswordMsg({ type: 'error', text: err.message }); }
+    finally { setSavingPw(false); }
   };
 
-  // ── Shared styles ──
-  const card = {
-    background: '#13131f',
-    border: '1px solid rgba(255,255,255,0.07)',
-    borderRadius: 20,
-    padding: 32,
-    marginBottom: 20,
-  };
-  const fieldLabel = {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '0.7rem',
-    fontWeight: 700,
-    letterSpacing: '0.08em',
-    color: '#6b6888',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  };
-  const inputStyle = {
-    width: '100%',
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    padding: '13px 16px',
-    color: '#f0eeff',
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: '0.92rem',
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-  const sectionTitle = {
-    fontFamily: "'Syne', sans-serif",
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    letterSpacing: '0.1em',
-    color: '#6b6888',
-    textTransform: 'uppercase',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 20,
-    paddingBottom: 14,
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-  };
-  const saveBtn = {
-    display: 'inline-flex', alignItems: 'center', gap: 8,
-    padding: '12px 28px', borderRadius: 14,
-    background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-    border: 'none', color: 'white',
-    fontFamily: "'Syne', sans-serif", fontSize: '0.85rem', fontWeight: 700,
-    cursor: 'pointer', letterSpacing: '0.04em',
-  };
-  const cancelBtn = {
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    padding: '12px 20px', borderRadius: 14,
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.1)', color: '#8882aa',
-    fontFamily: "'Syne', sans-serif", fontSize: '0.85rem', fontWeight: 700,
-    cursor: 'pointer',
-  };
-  const editBtn = {
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    padding: '7px 16px', borderRadius: 8, marginLeft: 'auto',
-    background: 'rgba(124,58,237,0.12)',
-    border: '1px solid rgba(124,58,237,0.25)', color: '#a78bfa',
-    fontFamily: "'Syne', sans-serif", fontSize: '0.75rem', fontWeight: 700,
-    cursor: 'pointer', letterSpacing: '0.04em',
-  };
-
-  const Alert = ({ msg }) => !msg ? null : (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '12px 16px', borderRadius: 12, marginBottom: 20,
-      fontFamily: "'DM Sans', sans-serif", fontSize: '0.88rem',
-      background: msg.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-      border: `1px solid ${msg.type === 'success' ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
-      color: msg.type === 'success' ? '#4ade80' : '#f87171',
-    }}>
-      {msg.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-      {msg.text}
-    </div>
-  );
-
-  const ReadField = ({ lbl, value, icon: Icon }) => (
-    <div style={{ marginBottom: 20 }}>
-      <div style={fieldLabel}>{Icon && <Icon size={13} />}{lbl}</div>
-      <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.95rem', color: '#f0eeff', margin: 0 }}>
-        {value || <span style={{ color: '#3d3a55' }}>—</span>}
-      </p>
-    </div>
+  const PwEyeBtn = ({ k }) => (
+    <button type="button" onClick={() => setShowPw(p => ({ ...p, [k]: !p[k] }))}
+      style={{ background: 'none', border: 'none', color: showPw[k] ? '#a855f7' : '#8882aa', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', borderRadius: 6 }}>
+      {showPw[k]
+        ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      }
+    </button>
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a14', color: '#f0eeff' }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1a1b3d 0%, #0a0b1e 50%, #1a1b3d 100%)', color: 'white' }}>
       <Navbar user={user} onLogout={onLogout} onNavigate={onNavigate} activePage="profile" />
 
-      <main style={{ maxWidth: 960, margin: '0 auto', padding: '48px 24px 80px' }}>
+      <main style={{ maxWidth: 1120, margin: '0 auto', padding: '48px 24px 100px' }}>
+        <h1 style={{ fontFamily: "'Syne',sans-serif", fontSize: '3rem', fontWeight: 700, margin: '0 0 32px', color: 'white' }}>Profile</h1>
 
-        {/* Page header */}
-        <div style={{ marginBottom: 40 }}>
-          <h1 style={{
-            fontFamily: "'Syne', sans-serif", fontSize: '2.2rem', fontWeight: 800,
-            background: 'linear-gradient(135deg, #a855f7, #e040fb)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '0 0 6px',
-          }}>My Profile</h1>
-          <p style={{ fontFamily: "'DM Sans', sans-serif", color: '#6b6888', fontSize: '0.95rem', margin: 0 }}>
-            Manage your account details and security
-          </p>
-        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 28, alignItems: 'start' }}>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, alignItems: 'start' }}>
+          {/* ── Left sticky sidebar ── */}
+          <div style={{ position: 'sticky', top: 104, paddingTop: 8 }}>
+            <div style={{ ...cardStyle, padding: 32 }}>
 
-          {/* ── Avatar card ── */}
-          <div style={{ position: 'sticky', top: 100 }}>
-            <div style={{ ...card, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 0 }}>
+              {/* ── Avatar ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
+                <div style={{ position: 'relative', marginBottom: 16 }}>
+                  {photo
+                    ? <img src={photo} alt="profile" style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(168,85,247,0.5)', display: 'block' }} />
+                    : (
+                      <div style={{ width: 120, height: 120, borderRadius: '50%', background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', border: '3px solid rgba(168,85,247,0.3)' }}>
+                        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 30%, rgba(236,72,153,0.8), transparent 60%)' }} />
+                        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: '2.5rem', fontWeight: 700, color: 'white', position: 'relative', zIndex: 1 }}>{initials}</span>
+                      </div>
+                    )
+                  }
+                  {/* Camera overlay button */}
+                  <button
+                    onClick={openEditProfile}
+                    title="Edit photo"
+                    style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.45)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0)'}
+                  >
+                    <Camera size={22} color="white" style={{ opacity: 0, transition: 'opacity 0.2s', pointerEvents: 'none' }}
+                      ref={el => {
+                        if (el) {
+                          const btn = el.closest('button');
+                          if (btn) {
+                            btn.onmouseenter = () => { el.style.opacity = 1; btn.style.background = 'rgba(0,0,0,0.45)'; };
+                            btn.onmouseleave = () => { el.style.opacity = 0; btn.style.background = 'rgba(0,0,0,0)'; };
+                          }
+                        }
+                      }}
+                    />
+                  </button>
+                </div>
 
-              {/* Avatar */}
-              <div style={{ position: 'relative', marginBottom: 20 }}>
-                {photo
-                  ? <img src={photo} alt="profile" style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(168,85,247,0.4)' }} />
-                  : <div style={{
-                      width: 96, height: 96, borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #4c1d95, #7c3aed)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: "'Syne', sans-serif", fontSize: '1.8rem', fontWeight: 800,
-                      color: 'white', border: '3px solid rgba(168,85,247,0.4)',
-                    }}>{initials}</div>
-                }
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploadingPhoto}
-                  title="Change photo"
-                  style={{
-                    position: 'absolute', bottom: 2, right: 2,
-                    width: 30, height: 30, borderRadius: '50%',
-                    background: uploadingPhoto ? '#555' : '#7c3aed',
-                    border: '2px solid #0a0a14', color: 'white',
-                    cursor: uploadingPhoto ? 'not-allowed' : 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Camera size={13} />
-                </button>
-                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
+                <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.5rem', fontWeight: 700, textAlign: 'center', margin: '0 0 4px', color: 'white' }}>{fullName || 'Your Name'}</h2>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#a855f7', textAlign: 'center', margin: 0, fontSize: '0.88rem' }}>{profile.email}</p>
               </div>
 
-              {photoMsg && (
-                <p style={{ fontSize: '0.78rem', margin: '-10px 0 12px', color: photoMsg.type === 'success' ? '#4ade80' : '#f87171' }}>
-                  {photoMsg.text}
-                </p>
-              )}
+              {/* Stats */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+                {[
+                  { icon: Calendar,   label: 'Events Hosting',   value: stats.hostingCount,   bg: 'rgba(168,85,247,0.1)',  iconColor: '#a855f7' },
+                  { icon: Users,      label: 'Events Attending', value: stats.attendingCount, bg: 'rgba(168,85,247,0.1)',  iconColor: '#a855f7' },
+                  { icon: TrendingUp, label: 'Total Attendees',  value: stats.totalAttendees, bg: 'rgba(236,72,153,0.1)', iconColor: '#ec4899' },
+                ].map(({ icon: Icon, label, value, bg, iconColor }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 12, background: bg }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Icon size={16} color={iconColor} />
+                      <span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white', fontSize: '0.88rem' }}>{label}</span>
+                    </div>
+                    <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: '1.1rem', color: 'white' }}>{value}</span>
+                  </div>
+                ))}
+              </div>
 
-              <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: '1.1rem', fontWeight: 700, margin: '0 0 4px', color: '#f0eeff' }}>
-                {profile.firstname} {profile.lastname}
-              </h2>
-              <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.82rem', color: '#6b6888', margin: '0 0 8px' }}>
-                {profile.email}
-              </p>
-              <span style={{
-                fontFamily: "'DM Sans', sans-serif", fontSize: '0.75rem',
-                color: '#a855f7', background: 'rgba(168,85,247,0.1)',
-                padding: '3px 10px', borderRadius: 999,
-              }}>HangOut Member</span>
-
-              <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', margin: '24px 0' }} />
-
-              <button onClick={onLogout} style={{
-                width: '100%', padding: 12, borderRadius: 12,
-                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-                color: '#f87171', fontFamily: "'Syne', sans-serif",
-                fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, letterSpacing: '0.04em',
-              }}>
-                <LogOut size={15} /> Log Out
+              <button onClick={openEditProfile}
+                style={{ width: '100%', padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontFamily: "'DM Sans',sans-serif", fontWeight: 600, fontSize: '0.92rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'box-shadow 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(168,85,247,0.35)'}
+                onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+              >
+                <User size={17} /> Edit Profile
               </button>
             </div>
           </div>
 
-          {/* ── Form cards ── */}
-          <div>
+          {/* ── Right content ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Personal Information */}
-            <div style={card}>
-              <div style={sectionTitle}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(168,85,247,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a855f7' }}>
-                  <User size={16} />
-                </div>
-                Personal Information
-                {!editingInfo && (
-                  <button onClick={() => { setEditingInfo(true); setProfileMsg(null); }} style={editBtn}>
-                    <Save size={12} /> Edit
-                  </button>
-                )}
+            <div style={{ ...cardStyle, padding: 32 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.4rem', fontWeight: 600, margin: 0, color: 'white' }}>Personal Information</h3>
+                <button onClick={openEditProfile} style={{ padding: '8px 16px', borderRadius: 8, background: 'transparent', border: 'none', color: '#a855f7', fontFamily: "'DM Sans',sans-serif", fontWeight: 600, cursor: 'pointer' }}>Edit</button>
               </div>
-
-              <Alert msg={profileMsg} />
-
-              {editingInfo ? (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                    <div>
-                      <div style={fieldLabel}>FIRST NAME</div>
-                      <input style={inputStyle} type="text" placeholder="Juan" value={profile.firstname}
-                        onChange={e => setProfile(p => ({ ...p, firstname: e.target.value }))} />
-                    </div>
-                    <div>
-                      <div style={fieldLabel}>LAST NAME</div>
-                      <input style={inputStyle} type="text" placeholder="Dela Cruz" value={profile.lastname}
-                        onChange={e => setProfile(p => ({ ...p, lastname: e.target.value }))} />
-                    </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                {[
+                  { icon: User,   label: 'Full Name',     value: fullName      },
+                  { icon: Mail,   label: 'Email Address', value: profile.email },
+                  { icon: Phone,  label: 'Phone Number',  value: '—'           },
+                  { icon: MapPin, label: 'Location',      value: '—'           },
+                ].map(({ icon: Icon, label, value }) => (
+                  <div key={label}>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>{label}</p>
+                    <div style={infoBox}><Icon size={18} color="#a855f7" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{value}</span></div>
                   </div>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={fieldLabel}><Mail size={13} /> EMAIL ADDRESS</div>
-                    <input style={{ ...inputStyle, opacity: 0.5, cursor: 'not-allowed' }} type="email"
-                      value={profile.email} readOnly title="Email cannot be changed" />
-                    <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '0.78rem', color: '#6b6888', marginTop: 6 }}>
-                      Email address cannot be changed
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                    <button style={saveBtn} onClick={handleSaveProfile} disabled={savingProfile}>
-                      <Save size={15} /> {savingProfile ? 'Saving...' : 'Save Changes'}
-                    </button>
-                    <button style={cancelBtn} onClick={() => { setEditingInfo(false); setProfileMsg(null); }}>
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                  <ReadField lbl="FIRST NAME" value={profile.firstname} />
-                  <ReadField lbl="LAST NAME"  value={profile.lastname} />
-                  <ReadField lbl="EMAIL ADDRESS" value={profile.email} icon={Mail} />
-                </div>
-              )}
+                ))}
+              </div>
             </div>
 
-            {/* Password & Security */}
-            <div style={card}>
-              <div style={sectionTitle}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(168,85,247,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a855f7' }}>
-                  <Lock size={16} />
+            {/* Host Verification */}
+            <div style={{ ...cardStyle, padding: 32, background: 'rgba(59,130,246,0.05)', borderColor: 'rgba(59,130,246,0.3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <CheckCircle2 size={22} color="#60a5fa" />
+                  <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.4rem', fontWeight: 600, margin: 0, color: 'white' }}>Host Verification</h3>
                 </div>
-                Password & Security
-                {!editingPw && (
-                  <button onClick={() => { setEditingPw(true); setPasswordMsg(null); }} style={editBtn}>
-                    <Lock size={12} /> Change
-                  </button>
-                )}
+                <span style={{ padding: '6px 16px', borderRadius: 999, background: 'rgba(34,197,94,0.2)', color: '#22c55e', fontFamily: "'DM Sans',sans-serif", fontWeight: 600, fontSize: '0.85rem' }}>Verified</span>
               </div>
-
-              <Alert msg={passwordMsg} />
-
-              {editingPw ? (
-                <>
-                  {[
-                    { key: 'old',     lbl: 'CURRENT PASSWORD'      },
-                    { key: 'newPass', lbl: 'NEW PASSWORD'           },
-                    { key: 'confirm', lbl: 'CONFIRM NEW PASSWORD'   },
-                  ].map(({ key, lbl }) => (
-                    <div key={key} style={{ marginBottom: 16 }}>
-                      <div style={fieldLabel}>{lbl}</div>
-                      <div style={{ position: 'relative' }}>
-                        <input
-                          style={{ ...inputStyle, paddingRight: 46 }}
-                          type={showPw[key] ? 'text' : 'password'}
-                          placeholder="••••••••"
-                          value={passwords[key]}
-                          onChange={e => setPasswords(p => ({ ...p, [key]: e.target.value }))}
-                        />
-                        <button type="button"
-                          onClick={() => setShowPw(p => ({ ...p, [key]: !p[key] }))}
-                          style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#6b6888', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                          {showPw[key] ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                    <button style={saveBtn} onClick={handleSavePassword} disabled={savingPw}>
-                      <Lock size={15} /> {savingPw ? 'Updating...' : 'Update Password'}
-                    </button>
-                    <button style={cancelBtn} onClick={() => { setEditingPw(false); setPasswordMsg(null); setPasswords({ old: '', newPass: '', confirm: '' }); }}>
-                      Cancel
-                    </button>
+              <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.6, margin: '0 0 24px' }}>
+                Verified hosts can receive payments and create paid events. Complete your verification to build trust with attendees.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                {[{ icon: IdCard, label: 'Legal Full Name', value: fullName || '—' }, { icon: Calendar, label: 'Date of Birth', value: '—' }].map(({ icon: Icon, label, value }) => (
+                  <div key={label}>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>{label}</p>
+                    <div style={infoBox}><Icon size={18} color="#60a5fa" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{value}</span></div>
                   </div>
-                </>
-              ) : (
-                <div>
-                  <div style={fieldLabel}><Lock size={13} /> PASSWORD</div>
-                  <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '1.3rem', color: '#3d3a55', letterSpacing: '0.15em', margin: 0 }}>
-                    ●●●●●●●●●●
-                  </p>
+                ))}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Full Address</p>
+                <div style={infoBox}><MapPin size={18} color="#60a5fa" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>—</span></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                {[{ icon: IdCard, label: 'Valid ID Type', value: '—' }, { icon: IdCard, label: 'ID Number', value: '—' }].map(({ icon: Icon, label, value }) => (
+                  <div key={label}>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>{label}</p>
+                    <div style={infoBox}><Icon size={18} color="#60a5fa" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{value}</span></div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>ID Document Upload</p>
+                <div style={{ padding: 24, borderRadius: 12, border: '2px dashed rgba(59,130,246,0.3)', background: 'rgba(59,130,246,0.05)', textAlign: 'center' }}>
+                  <CheckCircle2 size={28} color="#60a5fa" style={{ margin: '0 auto 8px' }} />
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: 'white', margin: '0 0 4px' }}>ID Verified</p>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#9ca3af', margin: 0 }}>Your identification has been verified</p>
                 </div>
-              )}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Payment Account Information</p>
+                <div style={{ ...infoBox, justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CreditCard size={18} color="#60a5fa" />
+                    <div>
+                      <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: 'white', margin: 0, fontSize: '0.9rem' }}>GCash: —</p>
+                      <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.78rem' }}>Not set up yet</p>
+                    </div>
+                  </div>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#6b7280' }} />
+                </div>
+              </div>
+              <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#93c5fd', margin: 0, lineHeight: 1.6 }}>
+                  ✓ Verification ensures that the person hosting events and receiving payments is properly identified, building trust and security for all attendees.
+                </p>
+              </div>
             </div>
 
+            {/* Account Settings */}
+            <div style={{ ...cardStyle, padding: 32 }}>
+              <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.4rem', fontWeight: 600, margin: '0 0 20px', color: 'white' }}>Account Settings</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <SettingsBtn icon={User} label="Personal Information" sub="Update your details"       onClick={openEditProfile} />
+                <SettingsBtn icon={Bell} label="Notifications"        sub="Manage your alerts" />
+                <SettingsBtn icon={Lock} label="Privacy & Security"   sub="Change password & privacy" onClick={openChangePw} />
+                <SettingsBtn icon={Mail} label="Email Preferences"    sub="Communication settings" />
+              </div>
+            </div>
+
+            {/* App Settings + Danger Zone */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              <div style={{ ...cardStyle, padding: 24 }}>
+                <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.15rem', fontWeight: 600, margin: '0 0 16px', color: 'white' }}>App Settings</h3>
+                <SettingsBtn icon={Settings} label="Preferences" sub="Customize your experience" />
+              </div>
+              <div style={{ ...cardStyle, padding: 24, background: 'rgba(239,68,68,0.05)', borderColor: 'rgba(239,68,68,0.3)' }}>
+                <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.15rem', fontWeight: 600, margin: '0 0 16px', color: '#f87171' }}>Danger Zone</h3>
+                <button onClick={onLogout}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: 'transparent', border: 'none', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <LogOut size={18} color="#f87171" />
+                    <div style={{ textAlign: 'left' }}>
+                      <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: '#f87171', margin: 0, fontSize: '0.9rem' }}>Sign Out</p>
+                      <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.78rem' }}>Log out of your account</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} color="#f87171" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </main>
+
+      {/* Help Button */}
+      <button style={{ position: 'fixed', bottom: 32, right: 32, width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg, #A855F7 0%, #EC4899 100%)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(168,85,247,0.5)' }}>
+        <HelpCircle size={24} />
+      </button>
+
+      {/* ── Edit Profile Modal ── */}
+      <Modal show={showEditProfile} onClose={() => { setShowEditProfile(false); setProfileMsg(null); }} title="Edit Profile">
+        <Alert msg={profileMsg} />
+
+        {/* Photo section inside modal */}
+        <div style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          {/* Avatar with camera overlay */}
+          <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => fileRef.current?.click()}>
+            {editPhoto && photoAction !== 'remove'
+              ? <img src={editPhoto} alt="preview" style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(168,85,247,0.5)', display: 'block' }} />
+              : (
+                <div style={{ width: 96, height: 96, borderRadius: '50%', background: 'linear-gradient(135deg, #7c3aed, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', border: '3px solid rgba(168,85,247,0.3)' }}>
+                  <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 30%, rgba(236,72,153,0.7), transparent 60%)' }} />
+                  <span style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.8rem', fontWeight: 700, color: 'white', position: 'relative', zIndex: 1 }}>{initials}</span>
+                </div>
+              )
+            }
+            {/* Hover overlay */}
+            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.opacity = 1}
+              onMouseLeave={e => e.currentTarget.style.opacity = 0}
+            >
+              <Camera size={20} color="white" />
+            </div>
+          </div>
+
+          {/* Small pill action buttons */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => fileRef.current?.click()}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 999, background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
+              <Upload size={13} />{editPhoto && photoAction !== 'remove' ? 'Change' : 'Upload'}
+            </button>
+
+            {editPhoto && photoAction !== 'remove' && (
+              <button onClick={() => { setPhotoAction('remove'); setEditPhoto(null); setPhotoMsg(null); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 999, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171', fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
+                <Trash2 size={13} /> Remove
+              </button>
+            )}
+
+            {photoAction === 'remove' && (
+              <button onClick={() => { setPhotoAction(null); setEditPhoto(photo); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 999, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
+                Undo
+              </button>
+            )}
+          </div>
+
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.74rem', color: '#6b7280', margin: 0 }}>JPG or PNG · Max 2MB</p>
+          {photoMsg && <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.78rem', color: '#f87171', margin: 0 }}>{photoMsg.text}</p>}
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoFileSelect} />
+        </div>
+
+        <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 20 }} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          <Field
+            label="First Name" placeholder="Juan"
+            value={editForm.firstname}
+            onChange={e => setEditForm(f => ({ ...f, firstname: e.target.value }))}
+            error={editErrors.firstname}
+            success={false}
+          />
+          <Field
+            label="Last Name" placeholder="Dela Cruz"
+            value={editForm.lastname}
+            onChange={e => setEditForm(f => ({ ...f, lastname: e.target.value }))}
+            success={false}
+          />
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <Field label="Email Address" value={profile.email} onChange={() => {}} type="email" disabled />
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#6b7280', marginTop: 6 }}>Email cannot be changed</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={handleSaveProfile} disabled={savingProfile}
+            style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'linear-gradient(135deg, #7c3aed, #a855f7)', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Save size={16} />{savingProfile ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button onClick={() => { setShowEditProfile(false); setProfileMsg(null); }}
+            style={{ padding: '13px 20px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Change Password Modal ── */}
+      <Modal show={showChangePw} onClose={() => { setShowChangePw(false); setPasswordMsg(null); }} title="Change Password">
+        <Alert msg={passwordMsg} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 8 }}>
+          <Field label="Current Password" placeholder="••••••••" type={showPw.old ? 'text' : 'password'}
+            value={passwords.old} onChange={e => setPasswords(p => ({ ...p, old: e.target.value }))}
+            error={pwErrors.old} success={!pwErrors.old && passwords.old.length > 0}
+            rightSlot={<PwEyeBtn k="old" />} />
+          <Field label="New Password" placeholder="••••••••" type={showPw.newPass ? 'text' : 'password'}
+            value={passwords.newPass} onChange={e => setPasswords(p => ({ ...p, newPass: e.target.value }))}
+            error={pwErrors.newPass} success={!pwErrors.newPass && passwords.newPass.length >= 6}
+            rightSlot={<PwEyeBtn k="newPass" />} />
+          <Field label="Confirm New Password" placeholder="••••••••" type={showPw.confirm ? 'text' : 'password'}
+            value={passwords.confirm} onChange={e => setPasswords(p => ({ ...p, confirm: e.target.value }))}
+            error={pwErrors.confirm} success={!pwErrors.confirm && passwords.confirm.length > 0 && passwords.confirm === passwords.newPass}
+            rightSlot={<PwEyeBtn k="confirm" />} />
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+          <button onClick={handleSavePassword} disabled={savingPw}
+            style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'linear-gradient(135deg, #7c3aed, #a855f7)', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Lock size={16} />{savingPw ? 'Updating...' : 'Update Password'}
+          </button>
+          <button onClick={() => { setShowChangePw(false); setPasswordMsg(null); }}
+            style={{ padding: '13px 20px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
