@@ -54,7 +54,7 @@ public class UserController {
         ));
     }
 
-    // GET STATS  ← new endpoint
+    // GET STATS 
     @GetMapping("/stats")
     public ResponseEntity<?> getStats(@RequestHeader("Authorization") String authHeader) {
         String email = extractEmail(authHeader);
@@ -100,6 +100,31 @@ public class UserController {
         userRepository.save(user);
         return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
     }
+
+    // GET PHOTO
+        @GetMapping("/photo")
+        public ResponseEntity<?> getPhoto(@RequestHeader("Authorization") String authHeader) {
+            String email = extractEmail(authHeader);
+            Optional<UserEntity> optUser = userRepository.findByEmail(email);
+            if (optUser.isEmpty() || optUser.get().getPhoto() == null)
+                return ResponseEntity.notFound().build();
+
+            byte[] photo = optUser.get().getPhoto();
+            String base64 = java.util.Base64.getEncoder().encodeToString(photo);
+            return ResponseEntity.ok(Map.of("photo", "data:image/jpeg;base64," + base64));
+        }
+
+        @DeleteMapping("/photo")
+        public ResponseEntity<?> deletePhoto(@RequestHeader("Authorization") String authHeader) {
+            String email = extractEmail(authHeader);
+            Optional<UserEntity> optUser = userRepository.findByEmail(email);
+            if (optUser.isEmpty()) return ResponseEntity.status(404).body(Map.of("message", "User not found"));
+            UserEntity user = optUser.get();
+            user.setPhoto(null);
+            user.setUpdatedAt(LocalDateTime.now());
+            userRepository.save(user);
+            return ResponseEntity.ok(Map.of("message", "Photo removed"));
+        }
 
     // EDIT PASSWORD
     @PutMapping("/password")
