@@ -55,8 +55,15 @@ export function Navbar({ user, onLogout, onNavigate, activePage }) {
           </div>
 
           {/* Profile chip */}
-          <button className={styles.profileChip} onClick={onLogout}>
-            <div className={styles.avatar}>{initials}</div>
+          <button className={styles.profileChip} onClick={() => onNavigate?.('profile')}>
+            <div className={styles.avatar} style={
+              user?.photoUrl ? {
+                backgroundImage: `url(${user.photoUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                fontSize: 0,
+              } : {}
+            }>{user?.photoUrl ? '' : initials}</div>
             <span className={styles.username}>{fullName}</span>
           </button>
 

@@ -8,6 +8,7 @@ import DiscoverPage    from "./pages/DiscoverPage";
 import MyHangoutsPage  from "./pages/MyHangoutsPage";
 import CreateEventPage from "./pages/CreateEventPage";
 import EventDetailPage from "./pages/EventDetailPage";
+import ProfilePage from "./pages/ProfilePage";
 
 import { getToken, getUser, clearSession } from "./utils/storage";
 
@@ -47,6 +48,10 @@ export default function App() {
     setHostedEvents(prev => [newEvent, ...prev]);
     setEditingEvent(null);
   }
+
+  function handleUserUpdated(updatedUser) {
+  setUser(prev => ({ ...prev, ...updatedUser }));
+}
 
   function handleEventUpdated(updatedEvent) {
     setHostedEvents(prev =>
@@ -93,6 +98,7 @@ export default function App() {
   if (page === "discover")    return <DiscoverPage    {...sharedProps} onViewEvent={handleViewEvent} />;
   if (page === "my-hangouts") return <MyHangoutsPage  {...sharedProps} hostedEvents={hostedEvents} onEditEvent={handleEditEvent} onViewEvent={handleViewEvent} />;
   if (page === "create")      return <CreateEventPage {...sharedProps} initialEvent={editingEvent} onEventCreated={handleEventCreated} onEventUpdated={handleEventUpdated} />;
+  if (page === "profile") return <ProfilePage {...sharedProps} onUserUpdated={handleUserUpdated} />;
   if (page === "register")    return <RegisterPage onGoLogin={() => setPage("login")} />;
   return                             <LoginPage onLogin={handleLogin} onGoRegister={() => setPage("register")} />;
 }
