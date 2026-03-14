@@ -9,7 +9,9 @@ import java.util.Date;
 @Component
 public class JwtUtils {
 
-    private final Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    private final Key key = Keys.hmacShaKeyFor(
+    "hangout-secret-key-must-be-at-least-32-chars-long".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+);
     private final long EXPIRATION = 86400000; // 24 hours
 
     public String generateToken(String email) {

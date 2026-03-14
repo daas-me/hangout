@@ -31,7 +31,7 @@ export default function LoginPage({ onLogin, onGoRegister }) {
       saveToken(data.token);
       saveUser({ email: data.email, firstname: data.firstname });
 
-      // Ask the browser to save / update the credentials for this site
+      
       if (window.PasswordCredential) {
         try {
           const cred = new window.PasswordCredential({ id: email, password });
