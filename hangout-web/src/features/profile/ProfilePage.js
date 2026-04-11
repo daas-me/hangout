@@ -7,7 +7,7 @@ import {
   Lock, Save, CheckCircle, AlertCircle, X, Trash2, Upload
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8081/api';
+const API_BASE = 'http://localhost:8080/api';
 
 const cardStyle = {
   background: 'rgba(30, 32, 60, 0.5)',
