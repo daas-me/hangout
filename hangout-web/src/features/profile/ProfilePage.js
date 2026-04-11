@@ -6,8 +6,15 @@ import {
   Phone, MapPin, CheckCircle2, CreditCard, IdCard,
   Lock, Save, CheckCircle, AlertCircle, X, Trash2, Upload
 } from 'lucide-react';
-
-const API_BASE = 'http://localhost:8080/api';
+import {
+  fetchUserProfile,
+  fetchUserPhoto,
+  fetchUserStats,
+  updateUserProfile,
+  uploadUserPhoto,
+  deleteUserPhoto,
+  changeUserPassword,
+} from './profileApi';
 
 const cardStyle = {
   background: 'rgba(30, 32, 60, 0.5)',
@@ -134,23 +141,50 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
   const [pwErrors, setPwErrors]           = useState({});
   const [passwordMsg, setPasswordMsg]     = useState(null);
   const [savingPw, setSavingPw]           = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
 
   const fileRef = useRef();
-  const token = () => localStorage.getItem('hangout_token');
+  const onUserUpdatedRef = useRef(onUserUpdated);
+  const userRef = useRef(user);
   const initials = ((profile.firstname?.[0] || '') + (profile.lastname?.[0] || '')).toUpperCase() || 'YO';
   const fullName = `${profile.firstname} ${profile.lastname}`.trim();
 
   useEffect(() => {
-    const t = token();
-    fetch(`${API_BASE}/user/profile`, { headers: { Authorization: `Bearer ${t}` } })
-      .then(r => r.json()).then(d => {
-        setProfile({ firstname: d.firstname || '', lastname: d.lastname || '', email: d.email || '' });
-        setEditForm({ firstname: d.firstname || '', lastname: d.lastname || '' });
-      }).catch(() => {});
-    fetch(`${API_BASE}/user/photo`, { headers: { Authorization: `Bearer ${t}` } })
-      .then(r => r.ok ? r.json() : null).then(d => { if (d?.photo) setPhoto(d.photo); }).catch(() => {});
-    fetch(`${API_BASE}/user/stats`, { headers: { Authorization: `Bearer ${t}` } })
-      .then(r => r.json()).then(d => setStats(d)).catch(() => {});
+    onUserUpdatedRef.current = onUserUpdated;
+    userRef.current = user;
+  }, [onUserUpdated, user]);
+
+  useEffect(() => {
+    const loadProfileData = async () => {
+      try {
+        const data = await fetchUserProfile();
+        setProfile({ firstname: data.firstname || '', lastname: data.lastname || '', email: data.email || '' });
+        setEditForm({ firstname: data.firstname || '', lastname: data.lastname || '' });
+        onUserUpdatedRef.current?.({ ...userRef.current, firstname: data.firstname, lastname: data.lastname });
+      } catch (err) {
+        console.error('Profile load failed:', err);
+      }
+
+      try {
+        const data = await fetchUserPhoto();
+        if (data?.photo) {
+          setPhoto(data.photo);
+          onUserUpdatedRef.current?.({ ...userRef.current, photoUrl: data.photo });
+        }
+      } catch (err) {
+        console.warn('Profile photo load failed:', err);
+      }
+
+      try {
+        const data = await fetchUserStats();
+        setStats(data);
+      } catch (err) {
+        console.warn('Stats load failed:', err);
+      }
+    };
+
+    loadProfileData();
   }, []);
 
   const handlePhotoFileSelect = (e) => {
@@ -182,23 +216,15 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
     if (Object.keys(e).length) { setEditErrors(e); return; }
     setSavingProfile(true); setProfileMsg(null);
     try {
-      // 1. Save name
-      const res = await fetch(`${API_BASE}/user/profile`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ firstname: editForm.firstname, lastname: editForm.lastname }),
-      });
-      const text = await res.text(); const data = text ? JSON.parse(text) : {};
-      if (!res.ok) throw new Error(data.message || 'Failed to update');
+      await updateUserProfile({ firstname: editForm.firstname, lastname: editForm.lastname });
 
-      // 2. Handle photo changes
       if (photoAction === 'upload' && photoFile) {
         const fd = new FormData(); fd.append('photo', photoFile);
-        await fetch(`${API_BASE}/user/photo`, { method: 'POST', headers: { Authorization: `Bearer ${token()}` }, body: fd });
+        await uploadUserPhoto(fd);
         setPhoto(editPhoto);
         onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: editPhoto });
       } else if (photoAction === 'remove') {
-        await fetch(`${API_BASE}/user/photo`, { method: 'DELETE', headers: { Authorization: `Bearer ${token()}` } });
+        await deleteUserPhoto();
         setPhoto(null);
         onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: null });
       } else {
@@ -208,8 +234,11 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
       setProfile(p => ({ ...p, firstname: editForm.firstname, lastname: editForm.lastname }));
       setProfileMsg({ type: 'success', text: 'Profile updated!' });
       setTimeout(() => { setShowEditProfile(false); setProfileMsg(null); }, 1200);
-    } catch (err) { setProfileMsg({ type: 'error', text: err.message }); }
-    finally { setSavingProfile(false); }
+    } catch (err) {
+      setProfileMsg({ type: 'error', text: err.message });
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const openChangePw = () => {
@@ -227,17 +256,14 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
     if (Object.keys(e).length) { setPwErrors(e); return; }
     setSavingPw(true); setPasswordMsg(null);
     try {
-      const res = await fetch(`${API_BASE}/user/password`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ oldPassword: passwords.old, newPassword: passwords.newPass }),
-      });
-      const text = await res.text(); const data = text ? JSON.parse(text) : {};
-      if (!res.ok) throw new Error(data.message || 'Failed to update password');
+      await changeUserPassword({ oldPassword: passwords.old, newPassword: passwords.newPass });
       setPasswordMsg({ type: 'success', text: 'Password changed!' });
       setTimeout(() => { setShowChangePw(false); setPasswordMsg(null); }, 1200);
-    } catch (err) { setPasswordMsg({ type: 'error', text: err.message }); }
-    finally { setSavingPw(false); }
+    } catch (err) {
+      setPasswordMsg({ type: 'error', text: err.message });
+    } finally {
+      setSavingPw(false);
+    }
   };
 
   const PwEyeBtn = ({ k }) => (
@@ -431,20 +457,36 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
               </div>
               <div style={{ ...cardStyle, padding: 24, background: 'rgba(239,68,68,0.05)', borderColor: 'rgba(239,68,68,0.3)' }}>
                 <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.15rem', fontWeight: 600, margin: '0 0 16px', color: '#f87171' }}>Danger Zone</h3>
-                <button onClick={onLogout}
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: 'transparent', border: 'none', cursor: 'pointer' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <LogOut size={18} color="#f87171" />
-                    <div style={{ textAlign: 'left' }}>
-                      <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: '#f87171', margin: 0, fontSize: '0.9rem' }}>Sign Out</p>
-                      <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.78rem' }}>Log out of your account</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <button onClick={() => setShowLogoutConfirm(true)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(248,113,113,0.25)', cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <LogOut size={18} color="#f87171" />
+                      <div style={{ textAlign: 'left' }}>
+                        <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: '#f87171', margin: 0, fontSize: '0.9rem' }}>Sign Out</p>
+                        <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.78rem' }}>Log out of your account</p>
+                      </div>
                     </div>
-                  </div>
-                  <ChevronRight size={16} color="#f87171" />
-                </button>
+                    <ChevronRight size={16} color="#f87171" />
+                  </button>
+                  <button onClick={() => setShowDeleteAccountConfirm(true)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(248,113,113,0.25)', cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Trash2 size={18} color="#f87171" />
+                      <div style={{ textAlign: 'left' }}>
+                        <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: '#f87171', margin: 0, fontSize: '0.9rem' }}>Delete Account</p>
+                        <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.78rem' }}>Remove your account permanently</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} color="#f87171" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -567,6 +609,30 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
           <button onClick={() => { setShowChangePw(false); setPasswordMsg(null); }}
             style={{ padding: '13px 20px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
             Cancel
+          </button>
+        </div>
+      </Modal>
+
+      <Modal show={showLogoutConfirm} onClose={() => setShowLogoutConfirm(false)} title="Confirm Sign Out">
+        <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.7 }}>Are you sure you want to sign out from this account?</p>
+        <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+          <button onClick={() => { setShowLogoutConfirm(false); onLogout(); }}
+            style={{ flex: 1, padding: '13px', borderRadius: 12, background: '#ef4444', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            Sign Out
+          </button>
+          <button onClick={() => setShowLogoutConfirm(false)}
+            style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      </Modal>
+
+      <Modal show={showDeleteAccountConfirm} onClose={() => setShowDeleteAccountConfirm(false)} title="Delete Account">
+        <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.7 }}>Account deletion is not available in this version yet. If you need help removing your account, please contact support.</p>
+        <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+          <button onClick={() => setShowDeleteAccountConfirm(false)}
+            style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            Okay
           </button>
         </div>
       </Modal>

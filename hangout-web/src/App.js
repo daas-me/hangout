@@ -1,7 +1,7 @@
-import React, { useState, useEffect, lazy, Suspense } from "react";
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import "./styles/global.css";
-import { getToken, getUser, clearSession } from "./shared/utils/storage";
+import { getToken, getTokenExpiry, getUser, isTokenExpired, clearSession, saveUser } from "./shared/utils/storage";
 
 const LoginPage       = lazy(() => import("./features/auth/LoginPage"));
 const RegisterPage    = lazy(() => import("./features/auth/RegisterPage"));
@@ -39,27 +39,65 @@ export default function App() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
 
-  useEffect(() => {
-    const token = getToken();
-    const saved = getUser();
-    if (token && saved) {
-      setUser(saved);
-    }
-    setChecking(false);
+  const idleTimer = useRef(null);
+  const expiryTimer = useRef(null);
+  const IDLE_TIMEOUT_MS = 1000 * 60 * 15; // 15 minutes
+
+  const clearSessionTimers = useCallback(() => {
+    window.clearTimeout(idleTimer.current);
+    window.clearTimeout(expiryTimer.current);
   }, []);
 
-  function handleLogin(userData) {
-    setUser(userData);
-    navigate(ROUTES.home, { replace: true });
-  }
-
-  function handleLogout() {
+  const handleLogout = useCallback(() => {
+    clearSessionTimers();
     clearSession();
     setUser(null);
     setHostedEvents([]);
     setEditingEvent(null);
     setSelectedEvent(null);
     navigate(ROUTES.login, { replace: true });
+  }, [clearSessionTimers, navigate]);
+
+  const scheduleIdleLogout = useCallback(() => {
+    window.clearTimeout(idleTimer.current);
+    idleTimer.current = window.setTimeout(() => {
+      handleLogout();
+    }, IDLE_TIMEOUT_MS);
+  }, [handleLogout, IDLE_TIMEOUT_MS]);
+
+  const scheduleTokenExpiryLogout = useCallback((token) => {
+    window.clearTimeout(expiryTimer.current);
+    const expiry = getTokenExpiry(token);
+    if (!expiry) return;
+    const msUntilExpiry = expiry - Date.now();
+    if (msUntilExpiry <= 0) {
+      handleLogout();
+      return;
+    }
+    expiryTimer.current = window.setTimeout(() => {
+      handleLogout();
+    }, msUntilExpiry);
+  }, [handleLogout]);
+
+  useEffect(() => {
+    const token = getToken();
+    const saved = getUser();
+    if (token && saved && !isTokenExpired(token)) {
+      setUser(saved);
+      scheduleTokenExpiryLogout(token);
+      scheduleIdleLogout();
+    } else {
+      clearSession();
+    }
+    setChecking(false);
+  }, [scheduleIdleLogout, scheduleTokenExpiryLogout]);
+
+  function handleLogin(userData) {
+    setUser(userData);
+    saveUser(userData);
+    scheduleTokenExpiryLogout(getToken());
+    scheduleIdleLogout();
+    navigate(ROUTES.home, { replace: true });
   }
 
   function handleEventCreated(newEvent) {
@@ -68,7 +106,11 @@ export default function App() {
   }
 
   function handleUserUpdated(updatedUser) {
-    setUser(prev => ({ ...prev, ...updatedUser }));
+    setUser(prev => {
+      const next = { ...prev, ...updatedUser };
+      saveUser(next);
+      return next;
+    });
   }
 
   function handleEventUpdated(updatedEvent) {
@@ -95,6 +137,21 @@ export default function App() {
 
   const routeEvent = location.state?.event;
   const detailEvent = selectedEvent || routeEvent;
+
+  useEffect(() => {
+    if (!user) return;
+
+    const resetIdle = () => {
+      scheduleIdleLogout();
+    };
+
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((eventName) => window.addEventListener(eventName, resetIdle));
+
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, resetIdle));
+    };
+  }, [user, scheduleIdleLogout]);
 
   const sharedProps = {
     user,
