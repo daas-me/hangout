@@ -17,51 +17,59 @@ public class UserController {
     @Autowired private JwtUtils    jwtUtils;
 
     private String extractEmail(String authHeader) {
-        return jwtUtils.extractEmail(authHeader.replace("Bearer ", ""));
+        if (authHeader == null || authHeader.trim().isEmpty()) {
+            throw new IllegalArgumentException("Authorization header is missing");
+        }
+        String token = authHeader.replace("Bearer ", "").trim();
+        if (token.isEmpty()) {
+            throw new IllegalArgumentException("Authorization header is empty");
+        }
+        return jwtUtils.extractEmail(token);
     }
 
     @GetMapping("/profile")
-    public ResponseEntity<?> getProfile(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<?> getProfile(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         return ResponseEntity.ok(userService.getProfile(extractEmail(authHeader)));
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<?> getStats(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<?> getStats(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         return ResponseEntity.ok(userService.getStats(extractEmail(authHeader)));
     }
 
     @PutMapping("/profile")
-    public ResponseEntity<?> editProfile(@RequestHeader("Authorization") String authHeader,
+    public ResponseEntity<?> editProfile(@RequestHeader(value = "Authorization", required = false) String authHeader,
                                           @RequestBody Map<String, String> body) {
         userService.editProfile(extractEmail(authHeader), body);
         return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
     }
 
     @PutMapping("/password")
-    public ResponseEntity<?> editPassword(@RequestHeader("Authorization") String authHeader,
+    public ResponseEntity<?> editPassword(@RequestHeader(value = "Authorization", required = false) String authHeader,
                                            @RequestBody Map<String, String> body) {
         userService.editPassword(extractEmail(authHeader), body.get("oldPassword"), body.get("newPassword"));
         return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
     }
 
     @GetMapping("/photo")
-    public ResponseEntity<?> getPhoto(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<?> getPhoto(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         return ResponseEntity.ok(Map.of("photo", userService.getPhoto(extractEmail(authHeader))));
     }
 
     @PostMapping("/photo")
-    public ResponseEntity<?> uploadPhoto(@RequestHeader("Authorization") String authHeader,
+    public ResponseEntity<?> uploadPhoto(@RequestHeader(value = "Authorization", required = false) String authHeader,
                                           @RequestParam("photo") MultipartFile file) {
         try {
             userService.uploadPhoto(extractEmail(authHeader), file.getBytes());
-            return ResponseEntity.ok(Map.of("message", "Photo uploaded successfully"));
+            String photo = userService.getPhoto(extractEmail(authHeader));
+            return ResponseEntity.ok(Map.of("message", "Photo uploaded successfully", "photo", photo));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("message", "Failed to upload photo"));
         }
     }
 
     @DeleteMapping("/photo")
-    public ResponseEntity<?> deletePhoto(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<?> deletePhoto(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         userService.deletePhoto(extractEmail(authHeader));
         return ResponseEntity.ok(Map.of("message", "Photo removed"));
     }

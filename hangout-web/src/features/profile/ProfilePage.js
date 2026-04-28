@@ -9,7 +9,7 @@ import {
 import {
   fetchUserProfile,
   fetchUserPhoto,
-  fetchUserStats,
+  fetchCalculatedActivityStats,
   updateUserProfile,
   uploadUserPhoto,
   deleteUserPhoto,
@@ -158,7 +158,7 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
   useEffect(() => {
     const loadProfileData = async () => {
       try {
-        const data = await fetchUserProfile();
+        const data = await fetchUserProfile(false);
         setProfile({ firstname: data.firstname || '', lastname: data.lastname || '', email: data.email || '' });
         setEditForm({ firstname: data.firstname || '', lastname: data.lastname || '' });
         onUserUpdatedRef.current?.({ ...userRef.current, firstname: data.firstname, lastname: data.lastname });
@@ -167,7 +167,7 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
       }
 
       try {
-        const data = await fetchUserPhoto();
+        const data = await fetchUserPhoto(false);
         if (data?.photo) {
           setPhoto(data.photo);
           onUserUpdatedRef.current?.({ ...userRef.current, photoUrl: data.photo });
@@ -177,7 +177,7 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
       }
 
       try {
-        const data = await fetchUserStats();
+        const data = await fetchCalculatedActivityStats(false);
         setStats(data);
       } catch (err) {
         console.warn('Stats load failed:', err);
@@ -220,15 +220,17 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
 
       if (photoAction === 'upload' && photoFile) {
         const fd = new FormData(); fd.append('photo', photoFile);
-        await uploadUserPhoto(fd);
-        setPhoto(editPhoto);
-        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: editPhoto });
+        const uploadResult = await uploadUserPhoto(fd);
+        const photoUrl = uploadResult?.imageUrl || uploadResult?.photo || editPhoto;
+        setPhoto(photoUrl);
+        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: photoUrl, photo: photoUrl });
       } else if (photoAction === 'remove') {
         await deleteUserPhoto();
         setPhoto(null);
-        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: null });
+        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: null, photo: null });
       } else {
-        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname });
+        // Even if photo wasn't changed, refresh it to ensure it's loaded
+        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: photo, photo: photo });
       }
 
       setProfile(p => ({ ...p, firstname: editForm.firstname, lastname: editForm.lastname }));

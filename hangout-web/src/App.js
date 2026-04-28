@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import "./styles/global.css";
 import { getToken, getTokenExpiry, getUser, isTokenExpired, clearSession, saveUser } from "./shared/utils/storage";
+import { fetchUserProfile, fetchUserPhoto } from "./features/profile/profileApi";
 
 const LoginPage       = lazy(() => import("./features/auth/LoginPage"));
 const RegisterPage    = lazy(() => import("./features/auth/RegisterPage"));
@@ -38,6 +39,7 @@ export default function App() {
   const [hostedEvents, setHostedEvents] = useState([]);
   const [editingEvent, setEditingEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [eventSourceRoute, setEventSourceRoute] = useState(null);
 
   const idleTimer = useRef(null);
   const expiryTimer = useRef(null);
@@ -83,21 +85,59 @@ export default function App() {
     const token = getToken();
     const saved = getUser();
     if (token && saved && !isTokenExpired(token)) {
-      setUser(saved);
       scheduleTokenExpiryLogout(token);
       scheduleIdleLogout();
+      // Fetch full profile data on app load
+      (async () => {
+        try {
+          const profile = await fetchUserProfile(true);
+          const photo = await fetchUserPhoto(true);
+          const mergedUser = {
+            ...saved,
+            ...profile,
+            photoUrl: photo?.photo || null,
+            photo: photo?.photo || null,
+          };
+          setUser(mergedUser);
+          saveUser(mergedUser);
+        } catch (err) {
+          console.error('Failed to fetch user profile:', err);
+          setUser(saved);
+        } finally {
+          setChecking(false);
+        }
+      })();
     } else {
       clearSession();
+      setChecking(false);
     }
-    setChecking(false);
-  }, [scheduleIdleLogout, scheduleTokenExpiryLogout]);
+    // Empty dependency array - only run once on app mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleLogin(userData) {
-    setUser(userData);
-    saveUser(userData);
     scheduleTokenExpiryLogout(getToken());
     scheduleIdleLogout();
-    navigate(ROUTES.home, { replace: true });
+    // Fetch full profile data after login and wait for it to complete
+    (async () => {
+      try {
+        const profile = await fetchUserProfile(true);
+        const photo = await fetchUserPhoto(true);
+        const mergedUser = {
+          ...userData,
+          ...profile,
+          photoUrl: photo?.photo || null,
+          photo: photo?.photo || null,
+        };
+        setUser(mergedUser);
+        saveUser(mergedUser);
+        navigate(ROUTES.home, { replace: true });
+      } catch (err) {
+        console.error('Failed to fetch user profile:', err);
+        setUser(userData);
+        navigate(ROUTES.home, { replace: true });
+      }
+    })();
   }
 
   function handleEventCreated(newEvent) {
@@ -127,12 +167,17 @@ export default function App() {
 
   function handleViewEvent(event) {
     setSelectedEvent(event);
+    // Track the current route as the source for the back button
+    setEventSourceRoute(location.pathname);
     navigate(`/events/${event.id}`, { state: { event } });
   }
 
   function handleBackFromEvent() {
     setSelectedEvent(null);
-    navigate(ROUTES.home);
+    // Navigate back to the source route, or home if not set
+    const backRoute = eventSourceRoute || ROUTES.home;
+    navigate(backRoute);
+    setEventSourceRoute(null);
   }
 
   const routeEvent = location.state?.event;
@@ -156,7 +201,12 @@ export default function App() {
   const sharedProps = {
     user,
     onLogout: handleLogout,
-    onNavigate: key => navigate(ROUTES[key] || ROUTES.home),
+    onNavigate: key => {
+      if (key === 'create') {
+        setEditingEvent(null);
+      }
+      navigate(ROUTES[key] || ROUTES.home);
+    },
   };
 
   if (checking) {
@@ -260,7 +310,7 @@ export default function App() {
           element={
             <ProtectedRoute user={user}>
               {detailEvent ? (
-                <EventDetailPage event={detailEvent} onBack={handleBackFromEvent} currentUser={user} />
+                <EventDetailPage event={detailEvent} onBack={handleBackFromEvent} currentUser={user} onEditEvent={handleEditEvent} />
               ) : (
                 <Navigate to={ROUTES.home} replace />
               )}

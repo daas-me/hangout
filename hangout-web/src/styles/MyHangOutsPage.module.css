@@ -362,6 +362,26 @@
 }
 .btnEdit:hover { background: #252540; }
 
+.btnPublish {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btnPublish:hover:not(:disabled) { opacity: 0.9; }
+.btnPublish:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .btnDelete {
   width: 52px;
   height: 52px;
@@ -377,6 +397,17 @@
   flex-shrink: 0;
 }
 .btnDelete:hover { background: rgba(239, 68, 68, 0.2); }
+
+.errorMsg {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  font-size: 0.85rem;
+  color: #fecaca;
+  font-family: 'DM Sans', sans-serif;
+  margin-top: 8px;
+}
 
 .btnIcon {
   width: 52px;

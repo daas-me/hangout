@@ -2,6 +2,7 @@ package com.hangout.app.event.service;
 
 import com.hangout.app.event.model.EventEntity;
 import com.hangout.app.event.repository.EventRepository;
+import com.hangout.app.event.repository.RSVPRepository;
 import com.hangout.app.user.model.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,7 @@ public class EventService {
 
     @Autowired private EventRepository eventRepository;
     @Autowired private UserRepository  userRepository;
+    @Autowired private RSVPRepository  rsvpRepository;
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -124,7 +126,67 @@ public class EventService {
         eventRepository.deleteById(id);
     }
 
+    // ── Publish/Unpublish ─────────────────────────────────────────────────────
+
+    public Map<String, Object> publishEvent(String email, Long id) {
+        UserEntity  user  = findUserOrThrow(email);
+        EventEntity event = findEventOrThrow(id);
+
+        if (!event.getHost().getId().equals(user.getId()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
+
+        event.setIsDraft(false);
+        event.setUpdatedAt(LocalDateTime.now());
+        return toResponse(eventRepository.save(event));
+    }
+
+    public Map<String, Object> unpublishEvent(String email, Long id) {
+        UserEntity  user  = findUserOrThrow(email);
+        EventEntity event = findEventOrThrow(id);
+
+        if (!event.getHost().getId().equals(user.getId())) {
+            System.out.println("[unpublishEvent] Forbidden: User " + user.getId() + " (" + email + 
+                ") attempted to unpublish event " + id + " owned by " + event.getHost().getId());
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to unpublish this event");
+        }
+
+        event.setIsDraft(true);
+        event.setUpdatedAt(LocalDateTime.now());
+        System.out.println("[unpublishEvent] Successfully unpublished event " + id + " by user " + email);
+        return toResponse(eventRepository.save(event));
+    }
+
     // ── Queries ───────────────────────────────────────────────────────────────
+
+    public Map<String, Object> getEventDetails(String email, Long id) {
+        UserEntity user;
+        try {
+            user = findUserOrThrow(email); // auth check
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found or token invalid");
+        }
+        
+        EventEntity event = findEventOrThrow(id);
+        
+        // Draft events: only owner can view
+        boolean isDraft = event.getIsDraft() != null && event.getIsDraft();
+        boolean isOwner = event.getHost().getId().equals(user.getId());
+        
+        if (isDraft && !isOwner) {
+            System.out.println("[getEventDetails] Forbidden: User " + user.getId() + " (" + email + 
+                ") tried to view draft event " + id + " owned by " + event.getHost().getId());
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                "You do not have permission to view this draft event");
+        }
+        
+        System.out.println("[getEventDetails] User " + email + " accessing event " + id + 
+            " (isDraft: " + isDraft + ", owner: " + isOwner + ")");
+        
+        // Recalculate attendance count to ensure accuracy (fixes any stale counts)
+        recalculateEventAttendance(event);
+        
+        return toResponse(event);
+    }
 
     public List<Map<String, Object>> getHostingEvents(String email) {
         UserEntity user = findUserOrThrow(email);
@@ -137,7 +199,9 @@ public class EventService {
         findUserOrThrow(email); // auth check
         return eventRepository
             .findByDateOrderByStartTimeAsc(LocalDate.now())
-            .stream().map(this::toResponse).collect(Collectors.toList());
+            .stream()
+            .filter(e -> e.getIsDraft() == null || !e.getIsDraft()) // Only published events
+            .map(this::toResponse).collect(Collectors.toList());
     }
 
     public List<Map<String, Object>> getDiscoverEvents(String email, String search, String filter) {
@@ -202,6 +266,8 @@ public class EventService {
             Map.entry("imageUrl",        e.getImageUrl() != null ? e.getImageUrl() : ""),
             Map.entry("date",            e.getDate().format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))),
             Map.entry("time",            timeLabel),
+            Map.entry("startTime",       startTime),
+            Map.entry("endTime",         endTime),
             Map.entry("location",        e.getLocation()),
             Map.entry("format",          e.getFormat()),
             Map.entry("eventType",       e.getEventType() != null ? e.getEventType() : "free"),
@@ -216,7 +282,11 @@ public class EventService {
             Map.entry("virtualPlatform", e.getVirtualPlatform() != null ? e.getVirtualPlatform() : ""),
             Map.entry("virtualLink",     e.getVirtualLink() != null ? e.getVirtualLink() : ""),
             Map.entry("isTrending",      e.getIsTrending()),
-            Map.entry("isDraft",         e.getIsDraft() != null ? e.getIsDraft() : false)
+            Map.entry("isDraft",         e.getIsDraft() != null ? e.getIsDraft() : false),
+            Map.entry("hostId",          e.getHost().getId()),
+            Map.entry("hostFirstName",   e.getHost().getFirstname() != null ? e.getHost().getFirstname() : ""),
+            Map.entry("hostLastName",    e.getHost().getLastname() != null ? e.getHost().getLastname() : ""),
+            Map.entry("hostEmail",       e.getHost().getEmail() != null ? e.getHost().getEmail() : "")
         );
     }
 
@@ -271,5 +341,23 @@ public class EventService {
     private EventEntity findEventOrThrow(Long id) {
         return eventRepository.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+    }
+
+    /**
+     * Recalculates attendance count for an event based on RSVP status.
+     * For paid events, counts only confirmed RSVPs.
+     * For free events, counts all registered RSVPs.
+     */
+    private void recalculateEventAttendance(EventEntity event) {
+        long count;
+        if (event.getPrice() != null && event.getPrice() > 0) {
+            // For paid events, only count confirmed RSVPs (payment approved)
+            count = rsvpRepository.countByEventAndStatus(event, "confirmed");
+        } else {
+            // For free events, count all registered RSVPs
+            count = rsvpRepository.countByEventAndStatus(event, "registered");
+        }
+        event.setAttendeeCount(Math.toIntExact(count));
+        eventRepository.save(event);
     }
 }
