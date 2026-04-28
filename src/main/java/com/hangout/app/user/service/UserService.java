@@ -76,8 +76,10 @@ public class UserService {
         return Map.of(
             "message",   "Login successful",
             "token",     jwtUtils.generateToken(user.getEmail()),
+            "id",        user.getId(),
             "email",     user.getEmail(),
-            "firstname", user.getFirstname()
+            "firstname", user.getFirstname(),
+            "lastname",  user.getLastname() != null ? user.getLastname() : ""
         );
     }
 

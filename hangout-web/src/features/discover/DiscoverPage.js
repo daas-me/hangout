@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Navbar } from '../../shared/components/Navbar';
-import { Search, Calendar, MapPin, Users, Filter, Binoculars } from 'lucide-react';
+import { Search, Calendar, MapPin, Users, Filter, Binoculars, Clock } from 'lucide-react';
 import { getDiscoverEvents } from './discoverApi';
 import s from '../../styles/DiscoverPage.module.css';
 
@@ -132,6 +132,10 @@ function EventCard({ event, onClick }) {
           <div className={s.metaRow}>
             <Calendar className={s.metaIcon} />
             <span>{event.date}</span>
+          </div>
+          <div className={s.metaRow}>
+            <Clock className={s.metaIcon} />
+            <span>{event.time}</span>
           </div>
           <div className={s.metaRow}>
             <MapPin className={s.metaIcon} />

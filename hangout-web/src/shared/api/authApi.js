@@ -10,6 +10,7 @@ export async function loginApi(email, password) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message || "Login failed");
+  localStorage.setItem('hangout_token', data.token);
   return data; // { token, email, firstname }
 }
 

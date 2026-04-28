@@ -29,7 +29,7 @@ export default function LoginPage({ onLogin, onGoRegister }) {
     try {
       const data = await loginApi(email, password);
       saveToken(data.token);
-      saveUser({ email: data.email, firstname: data.firstname });
+      saveUser({ id: data.id, email: data.email, firstname: data.firstname, lastname: data.lastname });
 
       
       if (window.PasswordCredential) {
@@ -41,7 +41,7 @@ export default function LoginPage({ onLogin, onGoRegister }) {
         }
       }
 
-      onLogin({ email: data.email, firstname: data.firstname });
+      onLogin({ id: data.id, email: data.email, firstname: data.firstname, lastname: data.lastname });
     } catch (err) {
       setErrors({ general: err.message });
     } finally {

@@ -1,11 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createEvent, updateEvent } from './eventsApi';
 import { Navbar } from '../../shared/components/Navbar';
+import { Toast } from '../../shared/components/Toast';
 import {
   Upload, Calendar, Clock, FileText, Type, MapPin, Users,
   Armchair, Ticket, CreditCard, Building2, Eye, Send,
   Save, Laptop, Tag, HelpCircle, X
 } from 'lucide-react';
+import { formatTo12Hour } from '../../shared/utils/timeFormatter';
 import s from '../../styles/CreateEventPage.module.css';
 import DatePicker from '../../shared/components/DatePicker';
 
@@ -79,6 +81,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
   const [preview,      setPreview]      = useState(false);
   const [publishing,   setPublishing]   = useState(false);
   const [errors,       setErrors]       = useState({});
+  const [toast,        setToast]        = useState(null);
   const fileRef      = useRef();
 
   const set = (k, v) => {
@@ -90,6 +93,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
+      setToast({ message: 'Image must be under 2MB.', type: 'error' });
       setErrors(err => ({ ...err, coverImage: 'Image must be under 2MB.' }));
       return;
     }
@@ -106,6 +110,15 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
     if (!form.startTime)                  e.startTime = 'Start time is required.';
     if (form.format !== 'virtual' && !form.location.trim()) e.location = 'Location is required.';
     if (form.eventType === 'paid' && !form.price) e.price = 'Ticket price is required for paid events.';
+    
+    // Check if event time is in the past for today's events
+    if (isToday(form.date) && form.startTime) {
+      const minTime = getMinTimeForToday();
+      if (form.startTime < minTime) {
+        e.startTime = 'Event time cannot be in the past.';
+      }
+    }
+    
     return e;
   }
 
@@ -127,6 +140,21 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
     // Convert YYYY-MM-DD → MM/DD/YYYY for display
     const [yyyy, mm, dd] = isoOrMasked.split('-');
     return `${mm}/${dd}/${yyyy}`;
+  }
+
+  function isToday(dateStr) {
+    if (!dateStr) return false;
+    const eventDate = toIsoDate(dateStr);
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return eventDate === todayIso;
+  }
+
+  function getMinTimeForToday() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   }
 
   function buildPayload(isDraft = false) {
@@ -173,14 +201,24 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
 
   const handlePreview = () => {
     const e = validate();
-    if (Object.keys(e).length > 0) { setErrors(e); return; }
+    if (Object.keys(e).length > 0) {
+      const firstError = Object.values(e)[0];
+      setToast({ message: firstError, type: 'error' });
+      setErrors(e);
+      return;
+    }
     setErrors({});
     setPreview(true);
   };
 
   const handlePublish = async () => {
     const e = validate();
-    if (Object.keys(e).length > 0) { setErrors(e); return; }
+    if (Object.keys(e).length > 0) {
+      const firstError = Object.values(e)[0];
+      setToast({ message: firstError, type: 'error' });
+      setErrors(e);
+      return;
+    }
     setPublishing(true);
     try {
       const payload = buildPayload(false);
@@ -195,7 +233,9 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
       onNavigate?.('my-hangouts');
     } catch (err) {
       console.error('Failed to save event:', err);
-      setErrors({ general: 'Could not reach the server. Please try again.' });
+      const errMsg = 'Could not reach the server. Please try again.';
+      setToast({ message: errMsg, type: 'error' });
+      setErrors({ general: errMsg });
     } finally {
       setPublishing(false);
     }
@@ -215,7 +255,31 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
       setPreview(false);
       onNavigate?.('my-hangouts');
     } catch (err) {
-      setErrors({ general: 'Could not save draft. Please try again.' });
+      const errMsg = 'Could not save draft. Please try again.';
+      setToast({ message: errMsg, type: 'error' });
+      setErrors({ general: errMsg });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    setPublishing(true);
+    try {
+      // Keep current draft status when editing
+      const isDraft = initialEvent?.isDraft ?? false;
+      const payload = buildPayload(isDraft);
+      if (isEditing) {
+        const saved = await updateEvent(initialEvent.id, payload);
+        onEventUpdated?.({ ...buildOptimistic(isDraft), id: saved.id });
+      }
+      setPreview(false);
+      onNavigate?.('my-hangouts');
+    } catch (err) {
+      console.error('Failed to save changes:', err);
+      const errMsg = 'Could not save changes. Please try again.';
+      setToast({ message: errMsg, type: 'error' });
+      setErrors({ general: errMsg });
     } finally {
       setPublishing(false);
     }
@@ -228,8 +292,10 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
         coverImage={coverImage}
         user={user}
         isEditing={isEditing}
+        initialEvent={initialEvent}
         onBack={() => setPreview(false)}
         onSaveDraft={handleSaveDraft}
+        onSaveChanges={handleSaveChanges}
         onPublish={handlePublish}
         publishing={publishing}
         publishError={errors.general}
@@ -246,8 +312,6 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
           <h1 className={s.pageTitle}>{isEditing ? 'Edit HangOut' : 'Create HangOut'}</h1>
           <p className={s.pageSub}>{isEditing ? 'Update your HangOut details' : 'Fill in the details to create your HangOut'}</p>
         </div>
-
-        {errors.general && <div className={s.alertError}>{errors.general}</div>}
 
         <div className={s.grid}>
           {/* Left column */}
@@ -290,7 +354,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
               <DatePicker
                 value={toDisplayDate(form.date)}
                 onChange={v => set('date', v)}
-                min={new Date()}
+                min={(() => { const d = new Date(); d.setHours(0,0,0,0); return d; })()}
                 error={!!errors.date}
                 success={!errors.date && !!form.date}
               />
@@ -299,7 +363,10 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
                 <div style={{ flex: 1 }}>
                   <input
                     className={`${s.input} ${errors.startTime ? s.inputError : form.startTime ? s.inputSuccess : ''}`}
-                    type="time" value={form.startTime} onChange={e => set('startTime', e.target.value)}
+                    type="time" 
+                    value={form.startTime} 
+                    onChange={e => set('startTime', e.target.value)}
+                    min={isToday(form.date) ? getMinTimeForToday() : undefined}
                   />
                   {errors.startTime && <span className={s.fieldError}>{errors.startTime}</span>}
                 </div>
@@ -424,18 +491,28 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
         </div>
 
         <div className={s.formActions}>
-          <button className={s.cancelBtn} type="button" onClick={() => onNavigate?.(isEditing ? 'my-hangouts' : 'home')}>CANCEL</button>
+          <button className={s.cancelBtn} type="button" onClick={() => window.history.back()}>CANCEL</button>
           <button className={s.previewBtn} type="button" onClick={handlePreview}>
             <Eye size={18} /> {isEditing ? 'PREVIEW CHANGES' : 'PREVIEW'}
           </button>
         </div>
       </main>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
 
 // Preview Page
-function PreviewPage({ form, coverImage, user, isEditing, onBack, onSaveDraft, onPublish, publishing = false, publishError }) {
+function PreviewPage({ form, coverImage, user, isEditing, initialEvent, onBack, onSaveDraft, onSaveChanges, onPublish, publishing = false, publishError }) {
+  const [toastMessage, setToastMessage] = useState(publishError ? { message: publishError, type: 'error' } : null);
+
+  useEffect(() => {
+    if (publishError) {
+      setToastMessage({ message: publishError, type: 'error' });
+    }
+  }, [publishError]);
+
   const fmtDate = d => {
     if (!d) return 'Not set';
     // d is YYYY-MM-DD from native date input
@@ -453,16 +530,30 @@ function PreviewPage({ form, coverImage, user, isEditing, onBack, onSaveDraft, o
           <p className={s.pvBarSub}>This is how your event will appear to attendees</p>
         </div>
         <div className={s.pvBarActions}>
-          {publishError && <p style={{ color: '#fca5a5', fontSize: '0.85rem', marginRight: 12 }}>{publishError}</p>}
           <button className={s.pvBackBtn} onClick={onBack}>Back to Editing</button>
-          {!isEditing && (
-            <button className={s.pvDraftBtn} onClick={onSaveDraft} disabled={publishing}>
-              <Save size={15} /> {publishing ? 'Saving...' : 'Save as Draft'}
-            </button>
+          {isEditing ? (
+            // Editing mode: show Save Changes and possibly Publish
+            <>
+              {initialEvent?.isDraft && (
+                <button className={s.pvPublishBtn} onClick={onPublish} disabled={publishing}>
+                  <Send size={15} /> {publishing ? 'Publishing...' : 'Publish'}
+                </button>
+              )}
+              <button className={s.pvPublishBtn} onClick={onSaveChanges} disabled={publishing}>
+                <Save size={15} /> {publishing ? 'Saving...' : 'Save Changes'}
+              </button>
+            </>
+          ) : (
+            // Creating mode: show Save as Draft and Publish
+            <>
+              <button className={s.pvDraftBtn} onClick={onSaveDraft} disabled={publishing}>
+                <Save size={15} /> {publishing ? 'Saving...' : 'Save as Draft'}
+              </button>
+              <button className={s.pvPublishBtn} onClick={onPublish} disabled={publishing}>
+                <Send size={15} /> {publishing ? 'Publishing...' : 'Publish'}
+              </button>
+            </>
           )}
-          <button className={s.pvPublishBtn} onClick={onPublish} disabled={publishing}>
-            <Send size={15} /> {publishing ? 'Publishing...' : isEditing ? 'Save Changes' : 'Publish'}
-          </button>
         </div>
       </div>
 
@@ -489,7 +580,7 @@ function PreviewPage({ form, coverImage, user, isEditing, onBack, onSaveDraft, o
                 <Clock size={18} className={s.pvCardIcon} />
                 <div>
                   <p className={s.pvCardLabel}>Time</p>
-                  <p className={s.pvCardValue}>{form.startTime && form.endTime ? `${form.startTime} – ${form.endTime}` : form.startTime || 'Not set'}</p>
+                  <p className={s.pvCardValue}>{form.startTime && form.endTime ? `${formatTo12Hour(form.startTime)} – ${formatTo12Hour(form.endTime)}` : form.startTime ? formatTo12Hour(form.startTime) : 'Not set'}</p>
                 </div>
               </div>
             </div>
@@ -582,6 +673,8 @@ function PreviewPage({ form, coverImage, user, isEditing, onBack, onSaveDraft, o
       </div>
 
       <button className={s.pvHelpBtn}><HelpCircle size={24} color="white" /></button>
+
+      {toastMessage && <Toast message={toastMessage.message} type={toastMessage.type} onClose={() => setToastMessage(null)} />}
     </div>
   );
 }

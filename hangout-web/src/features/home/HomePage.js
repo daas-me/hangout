@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navbar } from '../../shared/components/Navbar';
-import { Calendar, MapPin, Users, Flame, TrendingUp, Plus, Search, LayoutGrid, Tent, SunMoon } from 'lucide-react';
-import { getHostingEvents, getTodayEvents, getUserStats } from './homeApi';
+import { Calendar, MapPin, Users, Flame, TrendingUp, Plus, Search, LayoutGrid, Tent, SunMoon, Clock } from 'lucide-react';
+import { getHostingEvents, getTodayEvents, getCalculatedActivityStats } from './homeApi';
 import s from '../../styles/HomePage.module.css';
 
 function isToday(dateStr) {
@@ -15,12 +15,40 @@ function isToday(dateStr) {
   );
 }
 
+function formatTo12Hour(time24) {
+  if (!time24 || time24 === '—') return '—';
+  const [hours, minutes] = time24.split(':');
+  if (!hours || !minutes) return time24;
+  
+  const h = parseInt(hours, 10);
+  const m = parseInt(minutes, 10);
+  
+  if (isNaN(h) || isNaN(m)) return time24;
+  
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayHours = h % 12 || 12; // Convert 0 to 12, keep others
+  
+  return `${displayHours}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
 function normalise(event) {
+  // Build time range: prefer start/end times, fallback to time, then default to '—'
+  let timeDisplay = '—';
+  if (event.startTime && event.endTime) {
+    const startFormatted = formatTo12Hour(event.startTime);
+    const endFormatted = formatTo12Hour(event.endTime);
+    timeDisplay = `${startFormatted} – ${endFormatted}`;
+  } else if (event.startTime) {
+    timeDisplay = formatTo12Hour(event.startTime);
+  } else if (event.time) {
+    timeDisplay = formatTo12Hour(event.time);
+  }
+  
   return {
     id:           event.id,
     title:        event.title        || 'Untitled Event',
     date:         event.date         || '—',
-    time:         event.time         || event.startTime || '—',
+    time:         timeDisplay,
     location:     event.location     || 'Location not set',
     format:       event.format       || '—',
     imageUrl:     event.imageUrl     || null,
@@ -54,7 +82,11 @@ export default function HomePage({ user, onLogout, onNavigate, hostedEvents = []
 
   useEffect(() => {
     getHostingEvents()
-      .then(events => setApiHostingEvent(events[0] ?? null))
+      .then(events => {
+        // Filter to only show published (non-draft) events
+        const publishedEvents = events.filter(e => e.isDraft !== true);
+        setApiHostingEvent(publishedEvents[0] ?? null);
+      })
       .catch(() => {})
       .finally(() => setLoadingHosting(false));
 
@@ -63,15 +95,15 @@ export default function HomePage({ user, onLogout, onNavigate, hostedEvents = []
       .catch(() => {})
       .finally(() => setLoadingToday(false));
 
-    getUserStats()
+    getCalculatedActivityStats()
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoadingStats(false));
   }, [hostedEvents]);
 
-  // Only published (non-draft) local events
+  // Only published (non-draft) local events for the "You're Hosting" card
   const publishedLocal = hostedEvents.filter(e => e.isDraft !== true);
-
+  
   // Local published events happening today
   const localTodayEvents = publishedLocal.filter(e => {
     if (e._rawDate) return isToday(e._rawDate);
@@ -246,9 +278,11 @@ function HostingCard({ event, onClick }) {
         <div className={s.hostingMeta}>
           <div className={s.hostingMetaRow}>
             <Calendar style={{ width: 16, height: 16 }} />
-            <span className={s.hostingMetaText}>
-              {event.date}{event.time !== '—' ? ` • ${event.time}` : ''}
-            </span>
+            <span className={s.hostingMetaText}>{event.date}</span>
+          </div>
+          <div className={s.hostingMetaRow}>
+            <Clock style={{ width: 16, height: 16 }} />
+            <span className={s.hostingMetaText}>{event.time}</span>
           </div>
           <div className={s.hostingMetaRow}>
             <MapPin style={{ width: 16, height: 16 }} />
@@ -290,7 +324,7 @@ function TodayCard({ event, isFirst, onClick }) {
         <h4 className={s.todayTitle}>{event.title}</h4>
         <div className={s.todayMetaGrid}>
           <div className={s.todayMetaItem}>
-            <Calendar style={{ width: 14, height: 14 }} />
+            <Clock style={{ width: 14, height: 14 }} />
             <span className={s.todayMetaText}>{event.time}</span>
           </div>
           <div className={s.todayMetaItem}>

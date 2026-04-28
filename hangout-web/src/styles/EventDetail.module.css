@@ -360,6 +360,112 @@
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   box-shadow: 0 4px 24px rgba(16,185,129,0.35);
 }
+.rsvpBtnPending {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  box-shadow: 0 4px 24px rgba(245,158,11,0.35);
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+.rsvpBtnRejected {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 4px 24px rgba(239,68,68,0.35);
+}
+
+/* ── Manage Bar (for event hosts) ── */
+.manageBar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 48px;
+  background: rgba(13,13,20,0.92);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.manageDraftLabel {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #f0eeff;
+  margin: 0;
+}
+.manageDraftSub {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  color: #8882aa;
+  margin: 0;
+  margin-top: 2px;
+}
+.manageActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.manageBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(124,58,237,0.1);
+  color: #c4b5fd;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0;
+}
+.manageBtn:hover {
+  border-color: rgba(124,58,237,0.5);
+  background: rgba(124,58,237,0.2);
+  color: #e9d5ff;
+}
+.manageBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.manageBtnDanger:hover {
+  border-color: rgba(239,68,68,0.5);
+  background: rgba(239,68,68,0.2);
+  color: #fecaca;
+}
+
+/* ── Hero with draft badge ── */
+.heroTitleTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.draftBadgeHero {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background: rgba(239,68,68,0.2);
+  border: 1px solid rgba(239,68,68,0.5);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fecaca;
+}
+
+/* ── Error message ── */
+.alertError {
+  background: rgba(239,68,68,0.2);
+  border: 1px solid rgba(239,68,68,0.5);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  color: #fecaca;
+  font-family: 'DM Sans', sans-serif;
+}
 
 /* ── Help ── */
 .helpBtn {

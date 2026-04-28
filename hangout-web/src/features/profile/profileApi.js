@@ -51,6 +51,47 @@ export async function fetchUserStats(refresh = false) {
   return data;
 }
 
+export async function fetchCalculatedActivityStats(refresh = false) {
+  try {
+    // Fetch both hosting and attending events from the home endpoints
+    const [hostingRes, attendingRes] = await Promise.all([
+      fetch(`${API_BASE}/events/hosting`, { headers: getAuthHeaders() }),
+      fetch(`${API_BASE}/events/attending`, { headers: getAuthHeaders() }),
+    ]);
+
+    const hostingData = await hostingRes.json();
+    const attendingData = await attendingRes.json();
+
+    if (!hostingRes.ok) throw new Error(hostingData?.message || 'Failed to load hosting events');
+    if (!attendingRes.ok) throw new Error(attendingData?.message || 'Failed to load attending events');
+
+    // Filter only published (non-draft) hosting events
+    const publishedHostingCount = (hostingData || []).filter(e => e.isDraft !== true).length;
+
+    // Count attending events
+    const attendingCount = (attendingData || []).length;
+
+    // Calculate total attendees: sum of attendee counts for all attending events
+    const totalAttendees = (attendingData || []).reduce((sum, event) => {
+      const attendeeCount = event.attendees?.current ?? event.attendeeCount ?? 0;
+      return sum + attendeeCount;
+    }, 0);
+
+    const stats = {
+      hostingCount: publishedHostingCount,
+      attendingCount: attendingCount,
+      totalAttendees: totalAttendees,
+    };
+
+    profileCache.stats = stats;
+    return stats;
+  } catch (err) {
+    console.error('Failed to calculate activity stats:', err);
+    // Fallback to the original fetchUserStats if calculation fails
+    return fetchUserStats(refresh);
+  }
+}
+
 export async function updateUserProfile(payload) {
   const res = await fetch(`${API_BASE}/user/profile`, {
     method: 'PUT',
