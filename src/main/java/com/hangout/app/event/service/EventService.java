@@ -3,7 +3,7 @@ package com.hangout.app.event.service;
 import com.hangout.app.event.model.EventEntity;
 import com.hangout.app.event.repository.EventRepository;
 import com.hangout.app.event.repository.RSVPRepository;
-import com.hangout.app.user.model.UserEntity;
+import com.hangout.app.user.entity.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -17,6 +17,8 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -27,6 +29,17 @@ public class EventService {
     @Autowired private EventRepository eventRepository;
     @Autowired private UserRepository  userRepository;
     @Autowired private RSVPRepository  rsvpRepository;
+
+    // ── Helper Methods ─────────────────────────────────────────────────────────
+
+    private boolean hasEventPassed(EventEntity event) {
+        if (event.getDate() == null) return false;
+        LocalTime time = event.getEndTime() != null ? event.getEndTime()
+            : event.getStartTime() != null ? event.getStartTime()
+            : LocalTime.of(23, 59);
+        LocalDateTime endDateTime = LocalDateTime.of(event.getDate(), time);
+        return endDateTime.isBefore(LocalDateTime.now());
+    }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -60,10 +73,12 @@ public class EventService {
         event.setSeatingType((String) body.get("seatingType"));
         event.setDescription((String) body.get("description"));
         event.setPaymentMethod((String) body.get("paymentMethod"));
+        event.setAccountName((String) body.get("accountName"));
         event.setAccountNumber((String) body.get("accountNumber"));
         event.setVirtualPlatform((String) body.get("virtualPlatform"));
         event.setVirtualLink((String) body.get("virtualLink"));
         event.setImageUrl((String) body.get("imageUrl"));
+        if (body.containsKey("noRefundPolicy")) event.setNoRefundPolicy((Boolean) body.get("noRefundPolicy"));
         event.setIsDraft(isDraft(body));
 
         return toResponse(eventRepository.save(event));
@@ -85,10 +100,12 @@ public class EventService {
         if (body.containsKey("seatingType"))     event.setSeatingType((String) body.get("seatingType"));
         if (body.containsKey("description"))     event.setDescription((String) body.get("description"));
         if (body.containsKey("paymentMethod"))   event.setPaymentMethod((String) body.get("paymentMethod"));
+        if (body.containsKey("accountName"))     event.setAccountName((String) body.get("accountName"));
         if (body.containsKey("accountNumber"))   event.setAccountNumber((String) body.get("accountNumber"));
         if (body.containsKey("virtualPlatform")) event.setVirtualPlatform((String) body.get("virtualPlatform"));
         if (body.containsKey("virtualLink"))     event.setVirtualLink((String) body.get("virtualLink"));
         if (body.containsKey("imageUrl"))        event.setImageUrl((String) body.get("imageUrl"));
+        if (body.containsKey("noRefundPolicy"))  event.setNoRefundPolicy((Boolean) body.get("noRefundPolicy"));
         if (body.containsKey("isDraft"))         event.setIsDraft(isDraft(body));
 
         try {
@@ -110,6 +127,12 @@ public class EventService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date, time, price, or capacity");
         }
 
+        if ("completed".equals(event.getEventStatus()) && !hasEventPassed(event)
+            && !Boolean.TRUE.equals(event.getIsDraft())) {
+            event.setEventStatus("active");
+            event.setEventStatusReason(null);
+        }
+
         event.setUpdatedAt(LocalDateTime.now());
         return toResponse(eventRepository.save(event));
     }
@@ -123,7 +146,27 @@ public class EventService {
         if (!event.getHost().getId().equals(user.getId()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
 
-        eventRepository.deleteById(id);
+        // Mark as deleted instead of permanently deleting, to preserve history for attendees
+        event.setEventStatus("deleted");
+        event.setEventStatusReason("Host deleted the event");
+        event.setUpdatedAt(LocalDateTime.now());
+        eventRepository.save(event);
+    }
+
+    // ── Cancel Event (Host cancels an upcoming event) ────────────────────────
+
+    public Map<String, Object> cancelEvent(String email, Long id, String reason) {
+        UserEntity  user  = findUserOrThrow(email);
+        EventEntity event = findEventOrThrow(id);
+
+        if (!event.getHost().getId().equals(user.getId()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
+
+        // Mark as cancelled
+        event.setEventStatus("cancelled");
+        event.setEventStatusReason(reason != null ? reason : "Event was cancelled by the host");
+        event.setUpdatedAt(LocalDateTime.now());
+        return toResponse(eventRepository.save(event));
     }
 
     // ── Publish/Unpublish ─────────────────────────────────────────────────────
@@ -136,6 +179,13 @@ public class EventService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
 
         event.setIsDraft(false);
+        
+        // Reset completed status to active if event is now in the future
+        if ("completed".equals(event.getEventStatus()) && !hasEventPassed(event)) {
+            event.setEventStatus("active");
+            event.setEventStatusReason(null);
+        }
+        
         event.setUpdatedAt(LocalDateTime.now());
         return toResponse(eventRepository.save(event));
     }
@@ -159,80 +209,156 @@ public class EventService {
     // ── Queries ───────────────────────────────────────────────────────────────
 
     public Map<String, Object> getEventDetails(String email, Long id) {
-        UserEntity user;
-        try {
-            user = findUserOrThrow(email); // auth check
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found or token invalid");
-        }
-        
         EventEntity event = findEventOrThrow(id);
         
-        // Draft events: only owner can view
-        boolean isDraft = event.getIsDraft() != null && event.getIsDraft();
-        boolean isOwner = event.getHost().getId().equals(user.getId());
-        
-        if (isDraft && !isOwner) {
-            System.out.println("[getEventDetails] Forbidden: User " + user.getId() + " (" + email + 
-                ") tried to view draft event " + id + " owned by " + event.getHost().getId());
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                "You do not have permission to view this draft event");
+        // Check if event has passed and update status to completed
+        if ("active".equals(event.getEventStatus()) && hasEventPassed(event)) {
+            event.setEventStatus("completed");
+            eventRepository.save(event);
         }
         
-        System.out.println("[getEventDetails] User " + email + " accessing event " + id + 
-            " (isDraft: " + isDraft + ", owner: " + isOwner + ")");
+        // Check if event is draft
+        boolean isDraft = event.getIsDraft() != null && event.getIsDraft();
+        
+        // If draft, require authentication and ownership
+        if (isDraft) {
+            if (email == null) {
+                System.out.println("[getEventDetails] Unauthorized: Unauthenticated user tried to view draft event " + id);
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, 
+                    "Authentication required to view draft events");
+            }
+            UserEntity user = findUserOrThrow(email);
+            boolean isOwner = event.getHost().getId().equals(user.getId());
+            
+            if (!isOwner) {
+                System.out.println("[getEventDetails] Forbidden: User " + user.getId() + " (" + email + 
+                    ") tried to view draft event " + id + " owned by " + event.getHost().getId());
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                    "You do not have permission to view this draft event");
+            }
+        }
+        
+        // For published events, no auth required
+        if (email != null) {
+            System.out.println("[getEventDetails] Authenticated user " + email + " accessing published event " + id);
+        } else {
+            System.out.println("[getEventDetails] Unauthenticated user accessing published event " + id);
+        }
         
         // Recalculate attendance count to ensure accuracy (fixes any stale counts)
         recalculateEventAttendance(event);
-        
-        return toResponse(event);
+
+        Map<String, Object> response = toResponse(event);
+        if (email != null && !"anonymousUser".equals(email)) {
+            UserEntity user = findUserOrThrow(email);
+            rsvpRepository.findByEventAndUser(event, user).ifPresent(rsvp -> {
+                response.put("status",             rsvp.getStatus());
+                response.put("paymentStatus",      rsvp.getPaymentStatus());
+                response.put("paymentProofUrl",    rsvp.getPaymentProofUrl());
+                response.put("ticketNumber",      "TKT-" + rsvp.getId());
+                response.put("seatNumber",        rsvp.getSeatNumber());
+                response.put("refundStatus",      rsvp.getRefundStatus());
+                response.put("refundProofUrl",    rsvp.getRefundProofUrl());
+                response.put("refundAcknowledged", rsvp.getRefundAcknowledged());
+                response.put("refundRejectionReason", rsvp.getRefundRejectionReason());
+                response.put("attendeeStatus",        rsvp.getAttendeeStatus());
+                response.put("attendeeRejectionReason", rsvp.getAttendeeRejectionReason());
+                response.put("attendeeRejectionType",  rsvp.getAttendeeRejectionType());
+            });
+        }
+
+        return response;
     }
 
     public List<Map<String, Object>> getHostingEvents(String email) {
         UserEntity user = findUserOrThrow(email);
         return eventRepository
             .findByHostOrderByDateAscStartTimeAsc(user)
-            .stream().map(this::toResponse).collect(Collectors.toList());
+            .stream()
+            .peek(event -> {
+                // Check if event has passed and update status to completed
+                if ("active".equals(event.getEventStatus()) && hasEventPassed(event)) {
+                    event.setEventStatus("completed");
+                    eventRepository.save(event);
+                }
+            })
+            .map(this::toResponse).collect(Collectors.toList());
     }
 
     public List<Map<String, Object>> getTodayEvents(String email) {
         findUserOrThrow(email); // auth check
+        // Use database query instead of findByDate which may load draft events
         return eventRepository
-            .findByDateOrderByStartTimeAsc(LocalDate.now())
+            .findPublishedEventsByDate(LocalDate.now())
             .stream()
-            .filter(e -> e.getIsDraft() == null || !e.getIsDraft()) // Only published events
+            .peek(event -> {
+                // Check if event has passed and update status to completed
+                if ("active".equals(event.getEventStatus()) && hasEventPassed(event)) {
+                    event.setEventStatus("completed");
+                    eventRepository.save(event);
+                }
+            })
             .map(this::toResponse).collect(Collectors.toList());
     }
 
     public List<Map<String, Object>> getDiscoverEvents(String email, String search, String filter) {
-        findUserOrThrow(email); // auth check
+        // Optional auth check - unauthenticated users can discover public events
+        if (email != null) {
+            try {
+                findUserOrThrow(email);
+            } catch (Exception e) {
+                // If user lookup fails, just treat as unauthenticated
+                System.out.println("[getDiscoverEvents] User lookup failed for email: " + email + ", treating as unauthenticated");
+                email = null;
+            }
+        }
+        
         LocalDate today    = LocalDate.now();
         LocalDate weekEnd  = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
         LocalDate monthEnd = today.with(TemporalAdjusters.lastDayOfMonth());
 
-        return eventRepository.findAll().stream()
-            .filter(e -> e.getIsDraft() == null || !e.getIsDraft())
+        // Query database based on filter - don't load ALL events
+        List<EventEntity> events = switch (filter) {
+            case "today"      -> eventRepository.findPublishedEventsByDate(today);
+            case "this_week"  -> eventRepository.findPublishedEventsByDateRange(today, weekEnd);
+            case "this_month" -> eventRepository.findPublishedEventsByDateRange(today, monthEnd);
+            default           -> eventRepository.findAllPublishedEvents();  // Only published events
+        };
+
+        // Filter by search and price if needed
+        return events.stream()
+            .peek(event -> {
+                // Check if event has passed and update status to completed
+                if ("active".equals(event.getEventStatus()) && hasEventPassed(event)) {
+                    event.setEventStatus("completed");
+                    eventRepository.save(event);
+                }
+            })
+            .filter(e -> !"completed".equals(e.getEventStatus()))
             .filter(e -> search.isEmpty()
                 || e.getTitle().toLowerCase().contains(search.toLowerCase())
                 || e.getLocation().toLowerCase().contains(search.toLowerCase()))
             .filter(e -> switch (filter) {
                 case "free"       -> e.getPrice() == 0;
                 case "paid"       -> e.getPrice() > 0;
-                case "today"      -> e.getDate().isEqual(today);
-                case "this_week"  -> !e.getDate().isBefore(today) && !e.getDate().isAfter(weekEnd);
-                case "this_month" -> !e.getDate().isBefore(today) && !e.getDate().isAfter(monthEnd);
                 default           -> true;
-            })
-            .sorted((a, b) -> {
-                int d = a.getDate().compareTo(b.getDate());
-                return d != 0 ? d : a.getStartTime().compareTo(b.getStartTime());
             })
             .map(this::toResponse)
             .collect(Collectors.toList());
     }
 
     public Object[] locationSearch(String email, String q) {
-        findUserOrThrow(email); // auth check
+        // Optional auth check - unauthenticated users can search locations
+        if (email != null) {
+            try {
+                findUserOrThrow(email);
+            } catch (Exception e) {
+                // If user lookup fails, just treat as unauthenticated
+                System.out.println("[locationSearch] User lookup failed for email: " + email + ", treating as unauthenticated");
+                email = null;
+            }
+        }
+        
         try {
             String url = "https://nominatim.openstreetmap.org/search"
                 + "?q=" + java.net.URLEncoder.encode(q, "UTF-8")
@@ -260,34 +386,41 @@ public class EventService {
             ? e.getEndTime().format(DateTimeFormatter.ofPattern("HH:mm")) : "";
         String timeLabel = endTime.isEmpty() ? startTime : startTime + " \u2013 " + endTime;
 
-        return Map.ofEntries(
-            Map.entry("id",              e.getId()),
-            Map.entry("title",           e.getTitle()),
-            Map.entry("imageUrl",        e.getImageUrl() != null ? e.getImageUrl() : ""),
-            Map.entry("date",            e.getDate().format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))),
-            Map.entry("time",            timeLabel),
-            Map.entry("startTime",       startTime),
-            Map.entry("endTime",         endTime),
-            Map.entry("location",        e.getLocation()),
-            Map.entry("format",          e.getFormat()),
-            Map.entry("eventType",       e.getEventType() != null ? e.getEventType() : "free"),
-            Map.entry("price",           e.getPrice()),
-            Map.entry("capacity",        e.getCapacity()),
-            Map.entry("attendeeCount",   e.getAttendeeCount()),
-            Map.entry("attendees",       formatAttendees(e.getAttendeeCount())),
-            Map.entry("seatingType",     e.getSeatingType() != null ? e.getSeatingType() : "open"),
-            Map.entry("description",     e.getDescription() != null ? e.getDescription() : ""),
-            Map.entry("paymentMethod",   e.getPaymentMethod() != null ? e.getPaymentMethod() : ""),
-            Map.entry("accountNumber",   e.getAccountNumber() != null ? e.getAccountNumber() : ""),
-            Map.entry("virtualPlatform", e.getVirtualPlatform() != null ? e.getVirtualPlatform() : ""),
-            Map.entry("virtualLink",     e.getVirtualLink() != null ? e.getVirtualLink() : ""),
-            Map.entry("isTrending",      e.getIsTrending()),
-            Map.entry("isDraft",         e.getIsDraft() != null ? e.getIsDraft() : false),
-            Map.entry("hostId",          e.getHost().getId()),
-            Map.entry("hostFirstName",   e.getHost().getFirstname() != null ? e.getHost().getFirstname() : ""),
-            Map.entry("hostLastName",    e.getHost().getLastname() != null ? e.getHost().getLastname() : ""),
-            Map.entry("hostEmail",       e.getHost().getEmail() != null ? e.getHost().getEmail() : "")
-        );
+        Map<String, Object> map = new HashMap<>();
+        map.put("id",              e.getId());
+        map.put("title",           e.getTitle());
+        map.put("imageUrl",        e.getImageUrl() != null ? e.getImageUrl() : "");
+        map.put("date",            e.getDate().format(DateTimeFormatter.ofPattern("MMM dd, yyyy")));
+        map.put("time",            timeLabel);
+        map.put("startTime",       startTime);
+        map.put("endTime",         endTime);
+        map.put("location",        e.getLocation());
+        map.put("format",          e.getFormat());
+        map.put("eventType",       e.getEventType() != null ? e.getEventType() : "free");
+        map.put("price",           e.getPrice());
+        map.put("capacity",        e.getCapacity());
+        map.put("attendeeCount",   e.getAttendeeCount());
+        map.put("attendees",       formatAttendees(e.getAttendeeCount()));
+        map.put("seatingType",     e.getSeatingType() != null ? e.getSeatingType() : "open");
+        map.put("description",     e.getDescription() != null ? e.getDescription() : "");
+        map.put("paymentMethod",   e.getPaymentMethod() != null ? e.getPaymentMethod() : "");
+        map.put("accountName",      e.getAccountName() != null ? e.getAccountName() : "");
+        map.put("accountNumber",   e.getAccountNumber() != null ? e.getAccountNumber() : "");
+        map.put("virtualPlatform", e.getVirtualPlatform() != null ? e.getVirtualPlatform() : "");
+        map.put("virtualLink",     e.getVirtualLink() != null ? e.getVirtualLink() : "");
+        map.put("noRefundPolicy",  e.getNoRefundPolicy() != null ? e.getNoRefundPolicy() : false);
+        map.put("isTrending",      e.getIsTrending());
+        map.put("isDraft",         e.getIsDraft() != null ? e.getIsDraft() : false);
+        map.put("eventStatus",     e.getEventStatus() != null ? e.getEventStatus() : "active");
+        map.put("eventStatusReason", e.getEventStatusReason() != null ? e.getEventStatusReason() : "");
+        map.put("hostId",          e.getHost().getId());
+        map.put("hostFirstName",   e.getHost().getFirstname() != null ? e.getHost().getFirstname() : "");
+        map.put("hostLastName",    e.getHost().getLastname() != null ? e.getHost().getLastname() : "");
+        map.put("hostEmail",       e.getHost().getEmail() != null ? e.getHost().getEmail() : "");
+        map.put("hostPhoto",       e.getHost().getPhoto() != null 
+            ? "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(e.getHost().getPhoto()) 
+            : null); // HashMap allows null values unlike Map.ofEntries
+        return map;
     }
 
     private String formatAttendees(int count) {
@@ -349,15 +482,7 @@ public class EventService {
      * For free events, counts all registered RSVPs.
      */
     private void recalculateEventAttendance(EventEntity event) {
-        long count;
-        if (event.getPrice() != null && event.getPrice() > 0) {
-            // For paid events, only count confirmed RSVPs (payment approved)
-            count = rsvpRepository.countByEventAndStatus(event, "confirmed");
-        } else {
-            // For free events, count all registered RSVPs
-            count = rsvpRepository.countByEventAndStatus(event, "registered");
-        }
+        long count = rsvpRepository.countConfirmedExcludingRejected(event, "confirmed");
         event.setAttendeeCount(Math.toIntExact(count));
-        eventRepository.save(event);
     }
 }

@@ -7,7 +7,7 @@ const homeCache = {
   userStats: null,
 };
 
-function clearHomeCache() {
+export function clearHomeCache() {
   homeCache.hostingEvents = null;
   homeCache.attendingEvents = null;
   homeCache.todayEvents = null;
@@ -23,7 +23,13 @@ async function parseJson(res) {
 }
 
 export async function getHostingEvents(refresh = false) {
-  if (!refresh && homeCache.hostingEvents) return homeCache.hostingEvents;
+  // Cache expires after 2 minutes (120000ms) for hosting events
+  if (!refresh && homeCache.hostingEvents) {
+    const cached = homeCache.hostingEvents;
+    if (cached && cached.timestamp && Date.now() - cached.timestamp < 120000) {
+      return cached.data;
+    }
+  }
 
   const res = await fetch(`${API_BASE}/events/hosting`, {
     headers: getAuthHeaders(),
@@ -31,12 +37,18 @@ export async function getHostingEvents(refresh = false) {
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data?.message || 'Failed to load hosting events');
 
-  homeCache.hostingEvents = data;
+  homeCache.hostingEvents = { data, timestamp: Date.now() };
   return data;
 }
 
 export async function getAttendingEvents(refresh = false) {
-  if (!refresh && homeCache.attendingEvents) return homeCache.attendingEvents;
+  // Cache expires after 2 minutes (120000ms) for attending events
+  if (!refresh && homeCache.attendingEvents) {
+    const cached = homeCache.attendingEvents;
+    if (cached && cached.timestamp && Date.now() - cached.timestamp < 120000) {
+      return cached.data;
+    }
+  }
 
   const res = await fetch(`${API_BASE}/events/attending`, {
     headers: getAuthHeaders(),
@@ -44,12 +56,18 @@ export async function getAttendingEvents(refresh = false) {
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data?.message || 'Failed to load attending events');
 
-  homeCache.attendingEvents = data;
+  homeCache.attendingEvents = { data, timestamp: Date.now() };
   return data;
 }
 
 export async function getTodayEvents(refresh = false) {
-  if (!refresh && homeCache.todayEvents) return homeCache.todayEvents;
+  // Cache expires after 30 minutes (1800000ms) for today's events
+  if (!refresh && homeCache.todayEvents) {
+    const cached = homeCache.todayEvents;
+    if (cached && cached.timestamp && Date.now() - cached.timestamp < 1800000) {
+      return cached.data;
+    }
+  }
 
   const res = await fetch(`${API_BASE}/events/today`, {
     headers: getAuthHeaders(),
@@ -57,7 +75,7 @@ export async function getTodayEvents(refresh = false) {
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data?.message || "Failed to load today's events");
 
-  homeCache.todayEvents = data;
+  homeCache.todayEvents = { data, timestamp: Date.now() };
   return data;
 }
 
@@ -88,8 +106,8 @@ export async function getCalculatedActivityStats(refresh = false) {
     // Count attending events
     const attendingCount = (attendingEvents || []).length;
 
-    // Calculate total attendees: sum of attendee counts for all attending events
-    const totalAttendees = (attendingEvents || []).reduce((sum, event) => {
+    // Calculate total attendees: sum of confirmed attendee counts for all created events
+    const totalAttendees = (hostingEvents || []).reduce((sum, event) => {
       const attendeeCount = event.attendees?.current ?? event.attendeeCount ?? 0;
       return sum + attendeeCount;
     }, 0);

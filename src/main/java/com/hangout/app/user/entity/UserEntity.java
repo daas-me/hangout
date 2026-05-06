@@ -1,4 +1,4 @@
-package com.hangout.app.user.model;
+package com.hangout.app.user.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;

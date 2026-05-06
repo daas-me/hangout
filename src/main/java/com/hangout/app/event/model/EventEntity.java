@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
-import com.hangout.app.user.model.UserEntity;
+import com.hangout.app.user.entity.UserEntity;
 
 import java.time.LocalDateTime;
 
@@ -62,8 +62,15 @@ public class EventEntity {
     @Column(name = "payment_method")
     private String paymentMethod;
 
+    @Column(name = "account_name")
+    private String accountName;
+
     @Column(name = "account_number")
     private String accountNumber;
+
+    // Refund policy for paid events: true = no refunds, false = refunds allowed
+    @Column(name = "no_refund_policy", nullable = false)
+    private Boolean noRefundPolicy = false;
 
     // Virtual meeting fields
     @Column(name = "virtual_platform")
@@ -78,7 +85,15 @@ public class EventEntity {
     @Column(name = "is_draft", nullable = false)
     private Boolean isDraft = false;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // Event status: "active" | "completed" | "cancelled" | "deleted"
+    @Column(name = "event_status")
+    private String eventStatus = "active";
+
+    // Reason for event cancellation/deletion (e.g., "Host cancelled", "Host deleted")
+    @Column(name = "event_status_reason", columnDefinition = "TEXT")
+    private String eventStatusReason;
+
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "host_id", nullable = false)
     private UserEntity host;
 
@@ -135,8 +150,14 @@ public class EventEntity {
     public String getPaymentMethod() { return paymentMethod; }
     public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
 
+    public String getAccountName() { return accountName; }
+    public void setAccountName(String accountName) { this.accountName = accountName; }
+
     public String getAccountNumber() { return accountNumber; }
     public void setAccountNumber(String accountNumber) { this.accountNumber = accountNumber; }
+
+    public Boolean getNoRefundPolicy() { return noRefundPolicy; }
+    public void setNoRefundPolicy(Boolean noRefundPolicy) { this.noRefundPolicy = noRefundPolicy; }
 
     public String getVirtualPlatform() { return virtualPlatform; }
     public void setVirtualPlatform(String virtualPlatform) { this.virtualPlatform = virtualPlatform; }
@@ -149,6 +170,12 @@ public class EventEntity {
 
     public Boolean getIsDraft() { return isDraft; }
     public void setIsDraft(Boolean isDraft) { this.isDraft = isDraft; }
+
+    public String getEventStatus() { return eventStatus; }
+    public void setEventStatus(String eventStatus) { this.eventStatus = eventStatus; }
+
+    public String getEventStatusReason() { return eventStatusReason; }
+    public void setEventStatusReason(String eventStatusReason) { this.eventStatusReason = eventStatusReason; }
 
     public UserEntity getHost() { return host; }
     public void setHost(UserEntity host) { this.host = host; }

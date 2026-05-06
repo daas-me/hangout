@@ -9,6 +9,7 @@ import {
 import { getHostingEvents, deleteEvent, getAttendingEvents } from '../home/homeApi';
 import { publishEvent } from '../events/eventsApi';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
+import { STATUS_CONFIG } from '../../shared/config/statusConfig';
 import HostEventDashboard from '../events/HostEventDashboard';
 import AttendingEventDashboard from '../events/AttendingEventDashboard';
 import AttendingCard from './AttendingCard';
@@ -17,6 +18,8 @@ import s from '../../styles/MyHangOutsPage.module.css';
 export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvents = [], onEditEvent, onViewEvent }) {
   const [tab,             setTab]             = useState('hosting');
   const [search,          setSearch]          = useState('');
+  const [hostingFilter,   setHostingFilter]   = useState('published');
+  const [attendingFilter, setAttendingFilter] = useState('confirmed');
   const [apiHosting,      setApiHosting]      = useState([]);
   const [apiAttending,    setApiAttending]    = useState([]);
   const [loading,         setLoading]         = useState(true);
@@ -46,6 +49,7 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
   const fetchAllEvents = useCallback(async () => {
     setLoading(true);
     try {
+      // Use cache on initial load (refresh=false), only force refresh on manual actions
       await Promise.all([fetchHostingEvents(), fetchAttendingEvents()]);
     } finally {
       setLoading(false);
@@ -55,6 +59,59 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
   useEffect(() => {
     fetchAllEvents();
   }, [fetchAllEvents]);
+
+  // Auto-refresh every 30 seconds with cache (NOT forcing refresh)
+  // Only refresh if data is stale, don't spam the backend
+  useEffect(() => {
+    let refreshInterval;
+    let failureCount = 0;
+    const maxFailures = 3;
+
+    const performRefresh = () => {
+      Promise.all([
+        (async () => {
+          try {
+            // Don't force refresh - use cache if available
+            const data = await getHostingEvents(false);
+            setApiHosting(data);
+          } catch (err) {
+            console.warn('[MyHangoutsPage] Failed to refresh hosting:', err);
+            throw err;
+          }
+        })(),
+        (async () => {
+          try {
+            // Don't force refresh - use cache if available
+            const data = await getAttendingEvents(false);
+            setApiAttending(data);
+          } catch (err) {
+            console.warn('[MyHangoutsPage] Failed to refresh attending:', err);
+            throw err;
+          }
+        })(),
+      ])
+        .then(() => {
+          failureCount = 0; // Reset on success
+        })
+        .catch(err => {
+          failureCount++;
+          // Stop immediately on auth errors
+          if (err.message?.includes('401') || err.message?.includes('Authentication')) {
+            console.warn('[MyHangoutsPage] Auth error - stopping auto-refresh');
+            clearInterval(refreshInterval);
+            return;
+          }
+          if (failureCount >= maxFailures) {
+            console.warn('[MyHangoutsPage] Stopping auto-refresh after repeated failures');
+            clearInterval(refreshInterval);
+          }
+        });
+    };
+
+    // Start refresh after 30 seconds, then every 30 seconds
+    refreshInterval = setInterval(performRefresh, 30000);
+    return () => clearInterval(refreshInterval);
+  }, []);
 
   const handleDelete = async (id) => {
     try {
@@ -79,6 +136,67 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
   const newLocal   = hostedEvents.filter(e => !apiIds.has(e.id));
   const allHosting = [...newLocal, ...apiHosting];
 
+  const parseEventEndDate = (event) => {
+    if (!event?.date) return null;
+    if (event?.endTime) return new Date(`${event.date} ${event.endTime}`);
+    if (event?.startTime) return new Date(`${event.date} ${event.startTime}`);
+    return new Date(`${event.date} 23:59`);
+  };
+
+  const hasEventPassed = (event) => {
+    const endDate = parseEventEndDate(event);
+    return endDate ? endDate < new Date() : false;
+  };
+
+  const isEventCompleted = (event) => {
+    return event?.eventStatus === 'completed' || hasEventPassed(event);
+  };
+
+  const getAttendingStatus = (event) => {
+    const rsvpStatus    = event.status || 'confirmed';
+    const paymentStatus = event.paymentStatus || null;
+    const isCancelledRsvp = rsvpStatus === 'cancelled';
+    const isRejected  = rsvpStatus === 'rejected' || paymentStatus === 'rejected' || event.attendeeStatus === 'rejected';
+    const isPending   = !isRejected && event.price != null && event.price > 0 && (rsvpStatus === 'registered' || paymentStatus === 'pending');
+    const isConfirmed = !isPending && !isRejected && !isCancelledRsvp &&
+                        (rsvpStatus === 'confirmed' || paymentStatus === 'confirmed');
+    const eventPassed = hasEventPassed(event);
+
+    if (isCancelledRsvp) return 'cancelled';
+    if (isRejected) return 'rejected';
+    if (isPending) return 'pending';
+    if (eventPassed) return 'completed';
+    if (isConfirmed) return 'confirmed';
+    return 'unknown';
+  };
+
+  const hostingFilters = [
+    { key: 'published', label: 'Published' },
+    { key: 'draft',     label: 'Draft' },
+    { key: 'completed', label: 'Completed' },
+  ];
+
+  const attendingFilters = [
+    { key: 'all',       label: 'All' },
+    { key: 'confirmed', label: 'Confirmed' },
+    { key: 'pending',   label: 'Pending' },
+    { key: 'rejected',  label: 'Rejected' },
+    { key: 'cancelled', label: 'Cancelled' },
+    { key: 'completed', label: 'Completed' },
+  ];
+
+  const filterHostingEvent = (event) => {
+    if (hostingFilter === 'published') return event.isDraft !== true && !isEventCompleted(event);
+    if (hostingFilter === 'draft') return event.isDraft === true;
+    if (hostingFilter === 'completed') return event.isDraft !== true && isEventCompleted(event);
+    return false;
+  };
+
+  const filterAttendingEvent = (event) => {
+    if (attendingFilter === 'all') return true;
+    return getAttendingStatus(event) === attendingFilter;
+  };
+
   const tabs = [
     { key: 'hosting',   label: `Hosting (${allHosting.length})`    },
     { key: 'attending', label: `Attending (${apiAttending.length})` },
@@ -86,8 +204,12 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
   ];
 
   const q = search.toLowerCase();
-  const filteredHosting   = allHosting.filter(e => e.title?.toLowerCase().includes(q) || e.location?.toLowerCase().includes(q));
-  const filteredAttending = apiAttending.filter(e => e.title?.toLowerCase().includes(q) || e.location?.toLowerCase().includes(q));
+  const filteredHosting   = allHosting
+    .filter(e => e.title?.toLowerCase().includes(q) || e.location?.toLowerCase().includes(q))
+    .filter(filterHostingEvent);
+  const filteredAttending = apiAttending
+    .filter(e => e.title?.toLowerCase().includes(q) || e.location?.toLowerCase().includes(q))
+    .filter(filterAttendingEvent);
   const filteredFavorites = [];
 
   if (managingEvent) {
@@ -105,7 +227,10 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
     return (
       <AttendingEventDashboard
         event={viewingAttendingEvent}
-        onBack={() => setViewingAttendingEvent(null)}
+        onBack={() => {
+          setViewingAttendingEvent(null);
+          fetchAttendingEvents(); // Refresh in case of status changes
+        }}
         currentUser={user}
       />
     );
@@ -138,6 +263,36 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
         </div>
 
         {tab === 'hosting' && (
+          <div className={s.filterBar}>
+            {hostingFilters.map(filter => (
+              <button
+                key={filter.key}
+                type="button"
+                className={hostingFilter === filter.key ? s.filterBtnActive : s.filterBtn}
+                onClick={() => setHostingFilter(filter.key)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === 'attending' && (
+          <div className={s.filterBar}>
+            {attendingFilters.map(filter => (
+              <button
+                key={filter.key}
+                type="button"
+                className={attendingFilter === filter.key ? s.filterBtnActive : s.filterBtn}
+                onClick={() => setAttendingFilter(filter.key)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === 'hosting' && (
           <div className={s.list}>
             {loading ? (
               <><CardSkeleton /><CardSkeleton /></>
@@ -151,6 +306,7 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
                   onDelete={handleDelete}
                   onEdit={() => onEditEvent?.(event)}
                   onView={() => setManagingEvent(event)}
+                  onOpenEvent={() => onViewEvent(event)}
                   onPublish={handlePublish}
                   onRefresh={fetchHostingEvents}
                 />
@@ -170,7 +326,9 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
                 <AttendingCard 
                   key={event.id} 
                   event={event}
-                  onViewDetails={() => setViewingAttendingEvent(event)} 
+                  onViewDetails={() => setViewingAttendingEvent(event)}
+                  onOpenEvent={() => onViewEvent(event)}
+                  onEventCancelled={() => fetchAttendingEvents()}
                 />
               ))
             )}
@@ -224,7 +382,25 @@ function InfoItem({ icon: Icon, label, value, accent }) {
   );
 }
 
-function HostingCard({ event, onDelete, onEdit, onView, onPublish, onRefresh }) {
+function StatusBadge({ status }) {
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
+  const Icon = cfg.icon;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '6px 12px', borderRadius: 8,
+      background: cfg.bgLight, color: cfg.textColor || cfg.color,
+      fontSize: 12, fontWeight: 700, fontFamily: 'DM Sans, sans-serif',
+      whiteSpace: 'nowrap', flexShrink: 0,
+      border: cfg.borderColor ? `1px solid ${cfg.borderColor}` : 'none',
+    }}>
+      <Icon size={14} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function HostingCard({ event, onDelete, onEdit, onView, onOpenEvent, onPublish, onRefresh }) {
   const attendeeCurrent = event.attendees?.current ?? event.attendeeCount ?? 0;
   const attendeeMax     = event.attendees?.max ?? event.capacity ?? '∞';
   const isDraft         = event.isDraft === true;
@@ -265,8 +441,23 @@ function HostingCard({ event, onDelete, onEdit, onView, onPublish, onRefresh }) 
     }
   };
 
+  const parseEventEndDate = (event) => {
+    if (!event?.date) return null;
+    if (event?.endTime) return new Date(`${event.date} ${event.endTime}`);
+    if (event?.startTime) return new Date(`${event.date} ${event.startTime}`);
+    return new Date(`${event.date} 23:59`);
+  };
+
+  const hasEventPassed = (event) => {
+    const endDate = parseEventEndDate(event);
+    return endDate ? endDate < new Date() : false;
+  };
+
+  const eventStatus = event.eventStatus || 'active';
+  const isCompleted = !isDraft && (eventStatus === 'completed' || hasEventPassed(event));
+
   return (
-    <div className={`${s.card} ${isDraft ? s.cardDraft : ''}`}>
+    <div className={`${s.card} ${isDraft ? s.cardDraft : ''} ${isCompleted ? s.cardCompleted : ''}`}>
       <div className={s.imgWrap}>
         {event.imageUrl
           ? <img src={event.imageUrl} alt={event.title} className={s.img} />
@@ -278,13 +469,25 @@ function HostingCard({ event, onDelete, onEdit, onView, onPublish, onRefresh }) 
 
       <div className={s.details}>
         <div className={s.cardTitleRow}>
-          <h3 className={s.cardTitle}>{event.title}</h3>
-          {isDraft && (
-            <span className={s.draftBadge}>
-              <span className={s.draftDot} />
-              Draft
-            </span>
-          )}
+          <button
+            type="button"
+            className={s.cardTitleLink}
+            onClick={onOpenEvent}
+            style={{ margin: 0, padding: 0, background: 'none', border: 'none', textAlign: 'left' }}
+          >
+            <span className={s.cardTitle} style={{ display: 'inline-block' }}>{event.title}</span>
+          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {isDraft && (
+              <span className={s.draftBadge}>
+                <span className={s.draftDot} />
+                Draft
+              </span>
+            )}
+            {!isDraft && (
+              <StatusBadge status={isCompleted ? 'completed' : 'published'} />
+            )}
+          </div>
         </div>
         <div className={s.infoGrid}>
           <InfoItem icon={Calendar}       label="Date" value={event.date} />
@@ -313,10 +516,16 @@ function HostingCard({ event, onDelete, onEdit, onView, onPublish, onRefresh }) 
         </div>
         {publishError && <p className={s.errorMsg}>{publishError}</p>}
 
+        {isCompleted && (
+          <p className={s.completedNote}>
+            This HangOut is completed. You can still edit it to reschedule for a future date.
+          </p>
+        )}
+
         <Modal
           isOpen={showPublishModal}
-          title="Publish Event"
-          message="Are you ready to publish this event? It will become visible to everyone and they'll be able to see and RSVP."
+          title="Publish HangOut"
+          message="Are you ready to publish this HangOut? It will become visible to everyone and they'll be able to see and RSVP."
           confirmText="Publish"
           cancelText="Cancel"
           isDanger={false}
@@ -327,8 +536,8 @@ function HostingCard({ event, onDelete, onEdit, onView, onPublish, onRefresh }) 
 
         <Modal
           isOpen={showDeleteModal}
-          title="Delete Event"
-          message="Are you sure you want to delete this event? This action cannot be undone and all associated data will be permanently removed."
+          title="Delete HangOut"
+          message="Are you sure you want to delete this HangOut? This action cannot be undone and all associated data will be permanently removed."
           confirmText="Delete"
           cancelText="Cancel"
           isDanger={true}

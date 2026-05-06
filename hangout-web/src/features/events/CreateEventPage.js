@@ -5,7 +5,7 @@ import { Toast } from '../../shared/components/Toast';
 import {
   Upload, Calendar, Clock, FileText, Type, MapPin, Users,
   Armchair, Ticket, CreditCard, Building2, Eye, Send,
-  Save, Laptop, Tag, HelpCircle, X
+  Save, Laptop, Tag, HelpCircle, X, User
 } from 'lucide-react';
 import { formatTo12Hour } from '../../shared/utils/timeFormatter';
 import s from '../../styles/CreateEventPage.module.css';
@@ -25,24 +25,45 @@ const EMPTY = {
   maxAttendees:    '',
   price:           '',
   paymentMethod:   'gcash',
+  accountName:     '',
   accountNumber:   '',
   virtualPlatform: 'zoom',
   virtualLink:     '',
+  noRefundPolicy:  false,
 };
 
 function eventToForm(event) {
   if (!event) return EMPTY;
   let date = '';
   if (event.date) {
-    const d = new Date(event.date);
-    if (!isNaN(d)) {
-      // Convert to YYYY-MM-DD for native date input
-      const mm   = String(d.getMonth() + 1).padStart(2, '0');
-      const dd   = String(d.getDate()).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      date = `${mm}/${dd}/${yyyy}`;
+    // Backend sends date as "MMM dd, yyyy" (e.g., "May 06, 2026")
+    // Parse it manually to avoid locale issues
+    const dateMatch = event.date.match(/^(\w{3})\s+(\d{1,2}),\s+(\d{4})$/);
+    if (dateMatch) {
+      const [, monthStr, dayStr, yearStr] = dateMatch;
+      const monthNames = {
+        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+        'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+      };
+      const month = monthNames[monthStr];
+      const day = dayStr.padStart(2, '0');
+      const year = yearStr;
+      if (month) {
+        date = `${year}-${month}-${day}`; // YYYY-MM-DD
+      } else {
+        date = event.date;
+      }
     } else {
-      date = event.date;
+      // Fallback: try to parse as-is
+      const d = new Date(event.date);
+      if (!isNaN(d)) {
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        date = `${yyyy}-${mm}-${dd}`;
+      } else {
+        date = event.date;
+      }
     }
   }
   let startTime = '';
@@ -67,9 +88,11 @@ function eventToForm(event) {
     maxAttendees:    event.capacity        ? String(event.capacity) : '',
     price:           event.price           ? String(event.price)    : '',
     paymentMethod:   event.paymentMethod   || 'gcash',
+    accountName:     event.accountName     || '',
     accountNumber:   event.accountNumber   || '',
     virtualPlatform: event.virtualPlatform || 'zoom',
     virtualLink:     event.virtualLink     || '',
+    noRefundPolicy:  event.noRefundPolicy  || false,
   };
 }
 
@@ -105,18 +128,30 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
 
   function validate() {
     const e = {};
-    if (!form.title.trim())               e.title     = 'Event title is required.';
+    if (!form.title.trim())               e.title     = 'HangOut title is required.';
     if (!form.date || toIsoDate(form.date).length < 10) e.date = 'Date is required.';
     if (!form.startTime)                  e.startTime = 'Start time is required.';
     if (form.format !== 'virtual' && !form.location.trim()) e.location = 'Location is required.';
-    if (form.eventType === 'paid' && !form.price) e.price = 'Ticket price is required for paid events.';
+    if (form.eventType === 'paid' && !form.price) e.price = 'Ticket price is required for paid HangOuts.';
     
-    // Check if event time is in the past for today's events
-    if (isToday(form.date) && form.startTime) {
+    // Time validation for today's events
+    if (isToday(form.date)) {
       const minTime = getMinTimeForToday();
-      if (form.startTime < minTime) {
-        e.startTime = 'Event time cannot be in the past.';
+      
+      // Start time cannot be in the past
+      if (form.startTime && form.startTime < minTime) {
+        e.startTime = 'Start time cannot be in the past.';
       }
+      
+      // End time cannot be in the past (if provided)
+      if (form.endTime && form.endTime < minTime) {
+        e.endTime = 'End time cannot be in the past.';
+      }
+    }
+    
+    // End time must be after start time
+    if (form.startTime && form.endTime && form.endTime <= form.startTime) {
+      e.endTime = 'End time must be after start time.';
     }
     
     return e;
@@ -171,23 +206,30 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
       seatingType:     form.seatingType,
       description:     form.description,
       paymentMethod:   form.paymentMethod,
+      accountName:     form.accountName,
       accountNumber:   form.accountNumber,
       virtualPlatform: form.virtualPlatform,
       virtualLink:     form.virtualLink,
       imageUrl:        coverImage || null,
       placeUrl:        form.placeUrl || null,
+      noRefundPolicy:  form.noRefundPolicy || false,
       isDraft,
     };
   }
 
   function buildOptimistic(isDraft = false) {
+    const timeLabel = form.startTime && form.endTime ? `${formatTo12Hour(form.startTime)} – ${formatTo12Hour(form.endTime)}` 
+                   : form.startTime ? formatTo12Hour(form.startTime) 
+                   : '';
     return {
       id:          initialEvent?.id || Date.now(),
       title:       form.title,
       _rawDate:    toIsoDate(form.date),
       date:        new Date(toIsoDate(form.date)).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-      time:        form.startTime,
-      location:    form.format !== 'virtual' ? form.location : 'Virtual',
+      time:        timeLabel,
+      startTime:   form.startTime,
+      endTime:     form.endTime,
+      location:    form.format !== 'virtual' ? form.location : '',
       format:      form.format === 'in-person' ? 'In-Person' : form.format === 'virtual' ? 'Virtual' : 'Hybrid',
       price:       form.eventType === 'free' ? 0 : Number(form.price) || 0,
       capacity:    Number(form.maxAttendees) || 100,
@@ -195,6 +237,10 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
       imageUrl:    coverImage || null,
       seatingType: form.seatingType,
       description: form.description,
+      paymentMethod: form.paymentMethod,
+      accountName: form.accountName,
+      accountNumber: form.accountNumber,
+      noRefundPolicy: form.noRefundPolicy || false,
       isDraft,
     };
   }
@@ -224,7 +270,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
       const payload = buildPayload(false);
       if (isEditing) {
         const saved = await updateEvent(initialEvent.id, payload);
-        onEventUpdated?.({ ...buildOptimistic(false), id: saved.id });
+        onEventUpdated?.({ ...buildOptimistic(false), ...saved, id: saved.id });
       } else {
         const saved = await createEvent(payload);
         onEventCreated?.({ ...buildOptimistic(false), id: saved.id });
@@ -247,7 +293,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
       const payload = buildPayload(true);
       if (isEditing) {
         const saved = await updateEvent(initialEvent.id, payload);
-        onEventUpdated?.({ ...buildOptimistic(true), id: saved.id });
+        onEventUpdated?.({ ...buildOptimistic(true), ...saved, id: saved.id });
       } else {
         const saved = await createEvent(payload);
         onEventCreated?.({ ...buildOptimistic(true), id: saved.id });
@@ -340,7 +386,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
             </div>
 
             <div className={s.fieldGroup}>
-              <label className={s.fieldLabel}><Type size={16} className={s.fieldIcon} /> EVENT TITLE</label>
+              <label className={s.fieldLabel}><Type size={16} className={s.fieldIcon} /> HANGOUT TITLE</label>
               <input
                 className={`${s.input} ${errors.title ? s.inputError : form.title ? s.inputSuccess : ''}`}
                 type="text" placeholder="e.g., Christmas Party"
@@ -371,7 +417,20 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
                   {errors.startTime && <span className={s.fieldError}>{errors.startTime}</span>}
                 </div>
                 <span className={s.timeSep}>to</span>
-                <input className={s.input} type="time" value={form.endTime} onChange={e => set('endTime', e.target.value)} />
+                <input 
+                  className={`${s.input} ${errors.endTime ? s.inputError : form.endTime ? s.inputSuccess : ''}`}
+                  type="time" 
+                  value={form.endTime} 
+                  onChange={e => set('endTime', e.target.value)}
+                  min={(() => {
+                    if (isToday(form.date)) {
+                      const currentTime = getMinTimeForToday();
+                      return form.startTime && form.startTime > currentTime ? form.startTime : currentTime;
+                    }
+                    return form.startTime || undefined;
+                  })()}
+                />
+                {errors.endTime && <span className={s.fieldError}>{errors.endTime}</span>}
               </div>
             </div>
 
@@ -481,9 +540,31 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
                   </select>
                 </div>
                 <div className={s.fieldGroup}>
+                  <label className={s.fieldLabel}><User size={16} className={s.fieldIcon} /> ACCOUNT NAME</label>
+                  <input className={s.input} type="text" placeholder="Enter account holder name"
+                    value={form.accountName} onChange={e => set('accountName', e.target.value)} />
+                </div>
+                <div className={s.fieldGroup}>
                   <label className={s.fieldLabel}><Building2 size={16} className={s.fieldIcon} /> ACCOUNT NUMBER</label>
                   <input className={s.input} type="text" placeholder="Enter your account number"
                     value={form.accountNumber} onChange={e => set('accountNumber', e.target.value)} />
+                </div>
+                <div className={s.fieldGroup}>
+                  <label className={s.fieldLabel}><HelpCircle size={16} className={s.fieldIcon} /> REFUND POLICY</label>
+                  <div className={s.toggleWrap}>
+                    <label className={s.toggleLabel}>
+                      <input
+                        type="checkbox"
+                        checked={form.noRefundPolicy}
+                        onChange={e => set('noRefundPolicy', e.target.checked)}
+                      />
+                      <span className={s.toggleSwitch}></span>
+                      No refunds will be issued for this event
+                    </label>
+                    <p className={s.toggleDesc}>
+                      If enabled, guests acknowledge they cannot request refunds. You may still process refund requests manually.
+                    </p>
+                  </div>
                 </div>
               </>
             )}
@@ -527,18 +608,16 @@ function PreviewPage({ form, coverImage, user, isEditing, initialEvent, onBack, 
       <div className={s.pvBar}>
         <div>
           <p className={s.pvBarTitle}>Preview Mode</p>
-          <p className={s.pvBarSub}>This is how your event will appear to attendees</p>
+          <p className={s.pvBarSub}>This is how your HangOut will appear to attendees</p>
         </div>
         <div className={s.pvBarActions}>
           <button className={s.pvBackBtn} onClick={onBack}>Back to Editing</button>
           {isEditing ? (
-            // Editing mode: show Save Changes and possibly Publish
+            // Editing mode: show Save Changes and Publish (always allow republishing)
             <>
-              {initialEvent?.isDraft && (
-                <button className={s.pvPublishBtn} onClick={onPublish} disabled={publishing}>
-                  <Send size={15} /> {publishing ? 'Publishing...' : 'Publish'}
-                </button>
-              )}
+              <button className={s.pvPublishBtn} onClick={onPublish} disabled={publishing}>
+                <Send size={15} /> {publishing ? 'Publishing...' : 'Publish'}
+              </button>
               <button className={s.pvPublishBtn} onClick={onSaveChanges} disabled={publishing}>
                 <Save size={15} /> {publishing ? 'Saving...' : 'Save Changes'}
               </button>
@@ -564,7 +643,7 @@ function PreviewPage({ form, coverImage, user, isEditing, initialEvent, onBack, 
         }
         <div className={s.pvHeroOverlay} />
         <div className={s.pvHeroContent}>
-          <h1 className={s.pvHeroTitle}>{form.title || 'Untitled Event'}</h1>
+          <h1 className={s.pvHeroTitle}>{form.title || 'Untitled HangOut'}</h1>
         </div>
       </div>
 
@@ -621,7 +700,7 @@ function PreviewPage({ form, coverImage, user, isEditing, initialEvent, onBack, 
             </div>
 
             <div className={s.pvCardFlat}>
-              <p className={s.pvSectionTitle}>About This Event</p>
+              <p className={s.pvSectionTitle}>About This HangOut</p>
               <p className={s.pvAboutText}>{form.description || 'No description provided.'}</p>
             </div>
 
@@ -638,13 +717,22 @@ function PreviewPage({ form, coverImage, user, isEditing, initialEvent, onBack, 
             <div className={s.pvCardFlat}>
               <p className={s.pvSectionTitle}>Hosted By</p>
               <div className={s.pvHostRow}>
-                <div className={s.pvAvatar}>{initials.toUpperCase()}</div>
+                <div
+                  className={s.pvAvatar}
+                  style={user?.photoUrl || user?.photo ? {
+                    backgroundImage: `url(${user.photoUrl || user.photo})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  } : {}}
+                >
+                  {!(user?.photoUrl || user?.photo) && initials.toUpperCase()}
+                </div>
                 <div>
                   <div className={s.pvHostNameRow}>
                     <p className={s.pvCardValue}>{fn || 'You'}</p>
                     <span className={s.pvVerified}>✓</span>
                   </div>
-                  <p className={s.pvCardLabel}>Event Organizer</p>
+                  <p className={s.pvCardLabel}>HangOut Organizer</p>
                 </div>
               </div>
               <p className={s.pvEmail}>{user?.email ?? 'your.email@example.com'}</p>
@@ -664,6 +752,10 @@ function PreviewPage({ form, coverImage, user, isEditing, initialEvent, onBack, 
                 <div className={s.pvPaymentRow}>
                   <p className={s.pvCardLabel}>Account Number</p>
                   <p className={s.pvCardValue}>{form.accountNumber || '—'}</p>
+                </div>
+                <div className={s.pvPaymentRow}>
+                  <p className={s.pvCardLabel}>Refund Policy</p>
+                  <p className={s.pvCardValue}>{form.noRefundPolicy ? 'No refunds' : 'Refunds available'}</p>
                 </div>
                 <p className={s.pvPaymentNote}>After payment, you'll be asked to upload proof of payment for host approval.</p>
               </div>

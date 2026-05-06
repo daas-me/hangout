@@ -172,6 +172,7 @@
   position: relative;
   height: 200px;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .cardImg {
@@ -179,6 +180,11 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.4s ease-out;
+}
+
+.card:hover .cardImg {
+  transform: scale(1.08);
 }
 
 .formatBadge {

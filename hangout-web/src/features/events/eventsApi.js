@@ -1,8 +1,9 @@
-import { API_BASE, getAuthHeaders } from '../../shared/api/apiClient';
+import { API_BASE, getAuthHeaders, getPublicHeaders } from '../../shared/api/apiClient';
+import { clearHomeCache } from '../home/homeApi';
 
-export async function getEventDetails(id) {
-  const headers = getAuthHeaders();
-  console.log(`[getEventDetails] Fetching event ${id} with headers:`, { Authorization: headers.Authorization ? 'Bearer [token]' : 'NO_TOKEN' });
+export async function getEventDetails(id, useAuthHeader = false) {
+  const headers = useAuthHeader ? getAuthHeaders() : getPublicHeaders();
+  console.log(`[getEventDetails] Fetching event ${id} using ${useAuthHeader ? 'auth' : 'public'} headers`);
 
   const res = await fetch(`${API_BASE}/events/${id}`, {
     method: 'GET',
@@ -18,13 +19,11 @@ export async function getEventDetails(id) {
       // ignore parse error
     }
     
-    // Enhanced logging for 401 errors
     if (res.status === 401) {
-      console.error(`[getEventDetails] 401 Unauthorized - Token may be missing or expired`, {
-        hasAuthHeader: !!headers.Authorization,
-        tokenExists: !!localStorage.getItem('hangout_token'),
+      console.error(`[getEventDetails] 401 Unauthorized`, {
         errorMsg
       });
+      throw new Error(`${errorMsg} (401) - Please log in again`);
     }
     
     const fullError = `${errorMsg} (${res.status})`;
@@ -137,42 +136,84 @@ export async function unpublishEvent(id) {
 // ── RSVP Functions ────────────────────────────────────────────────────────
 
 export async function rsvpEvent(eventId, payload = {}) {
+  const headers = getAuthHeaders();
+  console.log('[rsvpEvent] Starting RSVP for event', eventId);
+  console.log('[rsvpEvent] Headers:', headers);
+  console.log('[rsvpEvent] Token in storage:', localStorage.getItem('hangout_token') ? 'EXISTS' : 'MISSING');
+  console.log('[rsvpEvent] Payload:', payload);
+  
   const res = await fetch(`${API_BASE}/events/${eventId}/rsvp`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers,
     body: JSON.stringify(payload),
   });
+  console.log('[rsvpEvent] Response status:', res.status);
+  
   if (!res.ok) {
     let errorMsg = 'Failed to RSVP for event';
     try {
       const data = await res.json();
+      console.log('[rsvpEvent] Error response data:', data);
       errorMsg = data.message || errorMsg;
     } catch (e) {
       if (res.status === 403) errorMsg = 'You do not have permission to RSVP for this event';
-      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in again.';
     }
+    
+    if (res.status === 401) {
+      console.error(`[rsvpEvent] 401 Unauthorized - Token may have expired`, { errorMsg });
+    }
+    
     throw new Error(`${errorMsg} (${res.status})`);
   }
   const data = await res.json();
+  clearHomeCache();
+  console.log(`[rsvpEvent] Successfully RSVP'd to event ${eventId}`);
   return data;
 }
 
-export async function cancelRSVP(eventId) {
-  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp`, {
+export async function cancelRSVP(eventId, payload = {}) {
+  const headers = getAuthHeaders();
+  console.log('[cancelRSVP] Starting cancellation for event', eventId);
+  console.log('[cancelRSVP] Headers:', headers);
+  console.log('[cancelRSVP] Token in storage:', localStorage.getItem('hangout_token') ? 'EXISTS' : 'MISSING');
+  console.log('[cancelRSVP] Payload:', payload);
+  
+  const requestOptions = {
     method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
+    headers,
+    body: JSON.stringify(payload), // Always send body, even if empty
+  };
+  
+  console.log('[cancelRSVP] Making request to:', `${API_BASE}/events/${eventId}/rsvp`);
+  console.log('[cancelRSVP] Request options:', { method: requestOptions.method, hasBody: true });
+  
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp`, requestOptions);
+  console.log('[cancelRSVP] Response status:', res.status);
+  
   if (!res.ok) {
     let errorMsg = 'Failed to cancel RSVP';
     try {
       const data = await res.json();
+      console.log('[cancelRSVP] Error response data:', data);
       errorMsg = data.message || errorMsg;
     } catch (e) {
-      // ignore parse error
+      console.log('[cancelRSVP] Failed to parse error response:', e);
+      if (res.status === 403) errorMsg = 'You do not have permission to cancel this RSVP';
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in again.';
+      else if (res.status === 404) errorMsg = 'RSVP not found. You may not be registered for this event.';
     }
-    throw new Error(errorMsg);
+    
+    if (res.status === 401) {
+      console.error(`[cancelRSVP] 401 Unauthorized - Token may have expired`, { errorMsg });
+      throw new Error(`${errorMsg} (${res.status})`);
+    }
+    
+    throw new Error(`${errorMsg} (${res.status})`);
   }
   const data = await res.json();
+  clearHomeCache();
+  console.log(`[cancelRSVP] Successfully cancelled RSVP for event ${eventId}`);
   return data;
 }
 
@@ -257,14 +298,20 @@ export async function rejectPayment(eventId, rsvpId) {
   return data;
 }
 
-export async function rejectAttendee(eventId, rsvpId, rejectionNote) {
+export async function rejectAttendee(eventId, rsvpId, rejectionReason) {
+  const headers = getAuthHeaders();
+  console.log(`[rejectAttendee] Rejecting attendee for event ${eventId}, RSVP ${rsvpId}`, {
+    Authorization: headers.Authorization ? 'Bearer [token]' : 'NO_TOKEN',
+    token: localStorage.getItem('hangout_token') ? 'EXISTS' : 'MISSING'
+  });
+  
   const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/${rsvpId}/reject-attendee`, {
     method: 'POST',
     headers: {
-      ...getAuthHeaders(),
+      ...headers,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ rejectionNote }),
+    body: JSON.stringify({ rejectionReason }),
   });
   if (!res.ok) {
     let errorMsg = 'Failed to reject attendee';
@@ -281,9 +328,37 @@ export async function rejectAttendee(eventId, rsvpId, rejectionNote) {
   return data;
 }
 
-export async function submitPaymentProof(eventId, file) {
+export async function removeAttendeeFromHistory(eventId, rsvpId) {
+  const headers = getAuthHeaders();
+  console.log(`[removeAttendeeFromHistory] Removing attendee for event ${eventId}, RSVP ${rsvpId}`, {
+    Authorization: headers.Authorization ? 'Bearer [token]' : 'NO_TOKEN',
+  });
+  
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/${rsvpId}/remove-from-history`, {
+    method: 'POST',
+    headers,
+  });
+  if (!res.ok) {
+    let errorMsg = 'Failed to remove attendee';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      if (res.status === 403) errorMsg = 'You do not have permission to remove attendees for this event';
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+    }
+    throw new Error(`${errorMsg} (${res.status})`);
+  }
+  const data = await res.json();
+  return data;
+}
+
+export async function submitPaymentProof(eventId, file, acknowledged = null) {
   const formData = new FormData();
   formData.append('paymentProof', file);
+  if (acknowledged !== null) {
+    formData.append('acknowledged', String(acknowledged));
+  }
 
   const headers = getAuthHeaders();
   // Don't set Content-Type for FormData - browser will set it with boundary
@@ -311,7 +386,142 @@ export async function submitPaymentProof(eventId, file) {
     throw new Error(`${errorMsg} (${res.status})`);
   }
 
-  const data = await res.json();
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (parseErr) {
+    console.warn('[submitPaymentProof] Response body could not be parsed as JSON:', parseErr);
+  }
   console.log('[submitPaymentProof] Payment proof submitted successfully');
+  return data;
+}
+
+// ── Refund Endpoints ──────────────────────────────────────────────────────
+
+export async function requestRefund(eventId, refundReason) {
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/refund`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ refundReason }),
+  });
+  if (!res.ok) {
+    let errorMsg = 'Failed to request refund';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      if (res.status === 403) errorMsg = "You do not have permission to request a refund for this event";
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+      else if (res.status === 400) errorMsg = 'You cannot request a refund for this event';
+    }
+    console.error(`[requestRefund] Error (${res.status}):`, errorMsg);
+    throw new Error(`${errorMsg} (${res.status})`);
+  }
+  const data = await res.json();
+  console.log('[requestRefund] Refund requested successfully');
+  return data;
+}
+
+export async function approveRefund(eventId, rsvpId, refundProofFile) {
+  const formData = new FormData();
+  formData.append('refundProof', refundProofFile);
+
+  const headers = getAuthHeaders();
+  delete headers['Content-Type'];
+
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/${rsvpId}/approve-refund`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!res.ok) {
+    let errorMsg = 'Failed to approve refund';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      if (res.status === 403) errorMsg = "You do not have permission to approve refunds for this event";
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+    }
+    console.error(`[approveRefund] Error (${res.status}):`, errorMsg);
+    throw new Error(`${errorMsg} (${res.status})`);
+  }
+  const data = await res.json();
+  console.log('[approveRefund] Refund approved successfully');
+  return data;
+}
+
+export async function rejectRefund(eventId, rsvpId, rejectionReason) {
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/${rsvpId}/reject-refund`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ rejectionReason }),
+  });
+  if (!res.ok) {
+    let errorMsg = 'Failed to reject refund';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      if (res.status === 403) errorMsg = "You do not have permission to reject refunds for this event";
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+    }
+    console.error(`[rejectRefund] Error (${res.status}):`, errorMsg);
+    throw new Error(`${errorMsg} (${res.status})`);
+  }
+  const data = await res.json();
+  console.log('[rejectRefund] Refund rejected successfully');
+  return data;
+}
+
+export async function acknowledgeRefund(eventId, acknowledgement, rejectionReason = null) {
+  const payload = { acknowledgement };
+  if (rejectionReason) {
+    payload.rejectionReason = rejectionReason;
+  }
+  
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/acknowledge-refund`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    let errorMsg = 'Failed to process refund acknowledgement';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      if (res.status === 403) errorMsg = "You do not have permission to acknowledge this refund";
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+    }
+    console.error(`[acknowledgeRefund] Error (${res.status}):`, errorMsg);
+    throw new Error(`${errorMsg} (${res.status})`);
+  }
+  const data = await res.json();
+  console.log('[acknowledgeRefund] Refund acknowledgement processed successfully');
+  return data;
+}
+
+// ── Remove from Attending List (Guest removes event from their list) ──────
+
+export async function removeFromAttendingList(eventId) {
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/remove-from-list`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    let errorMsg = 'Failed to remove event from list';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      // ignore parse error
+    }
+    console.error(`[removeFromAttendingList] Error (${res.status}):`, errorMsg);
+    throw new Error(errorMsg);
+  }
+  const data = await res.json();
+  clearHomeCache();
+  console.log(`[removeFromAttendingList] Event ${eventId} removed from attending list`);
   return data;
 }

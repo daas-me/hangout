@@ -13,13 +13,14 @@ export function PaymentVerificationModal({
   const [preview, setPreview]       = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [fileError, setFileError]   = useState(null);
+  const [acknowledged, setAcknowledged] = useState(false);
   const fileInputRef = useRef(null);
 
   if (!isOpen || !event) return null;
 
   const isValidFile = (f) => {
     const validTypes = ['image/jpeg', 'image/png', 'image/heic'];
-    const maxSize = 10 * 1024 * 1024;
+    const maxSize = 5 * 1024 * 1024;
     return validTypes.includes(f.type) && f.size <= maxSize;
   };
 
@@ -70,11 +71,16 @@ export function PaymentVerificationModal({
       setFileError('Please select a proof of payment file before submitting.');
       return;
     }
-    await onSubmit(file);
+    if (event.noRefundPolicy && !acknowledged) {
+      setFileError('Please acknowledge the refund policy before submitting.');
+      return;
+    }
+    await onSubmit(file, acknowledged);
     // Parent controls modal close; reset local state only on success
     setFile(null);
     setPreview(null);
     setFileError(null);
+    setAcknowledged(false);
   };
 
   const price = event.price || 0;
@@ -128,7 +134,7 @@ export function PaymentVerificationModal({
               </div>
               <div className={s.infoRow}>
                 <span className={s.infoLabel}>Account Name</span>
-                <span className={s.infoValue}>{event.accountName || 'Event Host'}</span>
+                <span className={s.infoValue}>{event.accountName || 'HangOut Host'}</span>
               </div>
               <div className={s.infoRow}>
                 <span className={s.infoLabel}>Account Number</span>
@@ -164,6 +170,38 @@ export function PaymentVerificationModal({
               <li>Wait for host verification (usually within 24 hours)</li>
             </ol>
           </div>
+
+          {/* Refund Policy Acknowledgement */}
+          {event.noRefundPolicy && (
+            <div className={s.acknowledgementSection}>
+              <div className={s.sectionHeader}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ width: 20, height: 20 }}>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14,2 14,8 20,8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10,9 9,10 11,10" />
+                </svg>
+                <p className={s.sectionTitle}>Refund Policy</p>
+              </div>
+              <div className={s.policyCard}>
+                <p className={s.policyText}>
+                  <strong>No Refunds Policy:</strong> This event does not offer refunds for any reason.
+                  By proceeding with payment, you acknowledge and accept this policy.
+                </p>
+                <label className={s.acknowledgementLabel}>
+                  <input
+                    type="checkbox"
+                    checked={acknowledged}
+                    onChange={(e) => setAcknowledged(e.target.checked)}
+                    className={s.acknowledgementCheckbox}
+                  />
+                  <span className={s.checkmark}></span>
+                  I acknowledge and accept the no refunds policy
+                </label>
+              </div>
+            </div>
+          )}
 
           {/* Upload Section */}
           <div className={s.uploadSection}>
@@ -205,7 +243,6 @@ export function PaymentVerificationModal({
                 <div className={s.previewInfo}>
                   <div className={s.fileName}>
                     <p className={s.fileNameTitle}>{file.name}</p>
-                    <p className={s.fileSize}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                   </div>
                   <button
                     className={s.removeBtn}
@@ -215,6 +252,22 @@ export function PaymentVerificationModal({
                   >
                     <X size={20} />
                   </button>
+                </div>
+
+                {/* File Info Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                    <p style={{ color: '#9ca3af', fontFamily: 'DM Sans, sans-serif', fontSize: 11, fontWeight: 600, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>File Size</p>
+                    <p style={{ color: '#10b981', fontFamily: 'DM Sans, sans-serif', fontSize: 12, fontWeight: 600, margin: 0 }}>
+                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                  <div style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+                    <p style={{ color: '#9ca3af', fontFamily: 'DM Sans, sans-serif', fontSize: 11, fontWeight: 600, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Format</p>
+                    <p style={{ color: '#a5b4fc', fontFamily: 'DM Sans, sans-serif', fontSize: 12, fontWeight: 600, margin: 0 }}>
+                      {file.name.split('.').pop().toUpperCase()}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -236,7 +289,11 @@ export function PaymentVerificationModal({
           <button className={s.btnCancel} onClick={onClose} disabled={isLoading}>
             Cancel
           </button>
-          <button className={s.btnSubmit} onClick={handleSubmit} disabled={isLoading || !file}>
+          <button
+            className={s.btnSubmit}
+            onClick={handleSubmit}
+            disabled={isLoading || !file || (event.noRefundPolicy && !acknowledged)}
+          >
             {isLoading ? 'Submitting...' : 'Submit Payment Proof'}
           </button>
         </div>

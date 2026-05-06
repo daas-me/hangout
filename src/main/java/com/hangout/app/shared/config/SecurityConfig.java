@@ -62,7 +62,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/uploads/**").permitAll() 
                 .requestMatchers("/api/events/uploads/**").permitAll() 
-                .requestMatchers("/api/*.png", "/api/*.jpg", "/api/*.jpeg", "/api/*.heic").permitAll()
+                .requestMatchers("/api/events/discover").permitAll()
+                .requestMatchers("/api/events/location/search").permitAll()
+                .requestMatchers("/api/events/*").permitAll()
+                .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

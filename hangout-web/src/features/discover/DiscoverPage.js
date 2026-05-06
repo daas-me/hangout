@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Navbar } from '../../shared/components/Navbar';
 import { Search, Calendar, MapPin, Users, Filter, Binoculars, Clock } from 'lucide-react';
 import { getDiscoverEvents } from './discoverApi';
+import { getTimeLabel } from '../../shared/utils/timeFormatter';
 import s from '../../styles/DiscoverPage.module.css';
 
 const FILTERS = [
@@ -20,19 +21,68 @@ export default function DiscoverPage({ user, onLogout, onNavigate, onViewEvent }
   const [search,  setSearch]  = useState('');
   const [filter,  setFilter]  = useState('all');
 
+  const isEventCompleted = useCallback((event) => {
+    if (event?.eventStatus === 'completed') return true;
+    if (!event?.date) return false;
+    if (event?.endTime) return new Date(`${event.date} ${event.endTime}`) < new Date();
+    if (event?.startTime) return new Date(`${event.date} ${event.startTime}`) < new Date();
+    return new Date(`${event.date} 23:59`) < new Date();
+  }, []);
+
+  const filterCompletedEvents = useCallback(
+    (events) => events.filter(event => !isEventCompleted(event)),
+    [isEventCompleted]
+  );
+
   const fetchEvents = useCallback(() => {
     setLoading(true);
     setError(null);
     getDiscoverEvents({ search, filter })
-      .then(setEvents)
-      .catch(() => setError('Could not load events. Please try again.'))
+      .then(data => setEvents(filterCompletedEvents(data)))
+      .catch(() => setError('Could not load HangOuts. Please try again.'))
       .finally(() => setLoading(false));
-  }, [search, filter]);
+  }, [search, filter, filterCompletedEvents]);
 
+  // Initial fetch on mount or when search/filter changes
+  // Debounce search changes to avoid hammering the backend
   useEffect(() => {
-    const t = setTimeout(fetchEvents, 300);
+    const t = setTimeout(fetchEvents, 500);
     return () => clearTimeout(t);
   }, [fetchEvents]);
+
+  // Auto-refresh every 60 seconds with smarter caching
+  useEffect(() => {
+    let refreshInterval;
+    let failureCount = 0;
+    const maxFailures = 3;
+
+    const performRefresh = () => {
+      // Don't refresh if user is typing in search
+      getDiscoverEvents({ search, filter })
+        .then(data => setEvents(filterCompletedEvents(data)))
+        .then(() => {
+          failureCount = 0; // Reset on success
+        })
+        .catch(err => {
+          console.warn('[DiscoverPage] Auto-refresh failed:', err);
+          failureCount++;
+          if (failureCount >= maxFailures) {
+            console.warn('[DiscoverPage] Stopping auto-refresh after repeated failures');
+            clearInterval(refreshInterval);
+          }
+        });
+    };
+
+    // Only refresh after 60 seconds, not immediately
+    const initialDelay = setTimeout(() => {
+      refreshInterval = setInterval(performRefresh, 60000);
+    }, 60000);
+    
+    return () => {
+      clearTimeout(initialDelay);
+      clearInterval(refreshInterval);
+    };
+  }, [search, filter, filterCompletedEvents]);
 
   return (
     <div className={s.page}>
@@ -48,7 +98,7 @@ export default function DiscoverPage({ user, onLogout, onNavigate, onViewEvent }
             <input
               className={s.searchInput}
               type="text"
-              placeholder="Search Events..."
+              placeholder="Search HangOuts..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -101,12 +151,12 @@ function EmptyDiscover({ search, filter }) {
         <Binoculars style={{ width: 32, height: 32, color: '#a855f7' }} />
       </div>
       <p className={s.emptyTitle}>
-        {hasQuery ? 'No results found' : 'No events yet'}
+        {hasQuery ? 'No results found' : 'No HangOuts yet'}
       </p>
       <p className={s.emptySub}>
         {hasQuery
           ? 'Try adjusting your search or filter to find something.'
-          : 'Check back soon — events will appear here once they are created.'}
+          : 'Check back soon — HangOuts will appear here once they are created.'}
       </p>
     </div>
   );
@@ -135,7 +185,7 @@ function EventCard({ event, onClick }) {
           </div>
           <div className={s.metaRow}>
             <Clock className={s.metaIcon} />
-            <span>{event.time}</span>
+            <span>{getTimeLabel(event)}</span>
           </div>
           <div className={s.metaRow}>
             <MapPin className={s.metaIcon} />

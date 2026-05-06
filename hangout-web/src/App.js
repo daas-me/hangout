@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
-import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from "react-router-dom";
 import "./styles/global.css";
 import { getToken, getTokenExpiry, getUser, isTokenExpired, clearSession, saveUser } from "./shared/utils/storage";
 import { fetchUserProfile, fetchUserPhoto } from "./features/profile/profileApi";
@@ -53,12 +53,17 @@ export default function App() {
   const handleLogout = useCallback(() => {
     clearSessionTimers();
     clearSession();
+    // Clear cached profile data to prevent stale data on next login
+    localStorage.removeItem("cachedProfile");
+    localStorage.removeItem("cachedPhoto");
+    localStorage.removeItem("lastProfileFetch");
     setUser(null);
     setHostedEvents([]);
     setEditingEvent(null);
     setSelectedEvent(null);
-    navigate(ROUTES.login, { replace: true });
-  }, [clearSessionTimers, navigate]);
+    // Reload the entire app to ensure clean state
+    window.location.reload();
+  }, [clearSessionTimers]);
 
   const scheduleIdleLogout = useCallback(() => {
     window.clearTimeout(idleTimer.current);
@@ -87,11 +92,34 @@ export default function App() {
     if (token && saved && !isTokenExpired(token)) {
       scheduleTokenExpiryLogout(token);
       scheduleIdleLogout();
-      // Fetch full profile data on app load
+      
+      // Fetch full profile data on app load, but cache for 10 minutes to reduce server hits
       (async () => {
         try {
-          const profile = await fetchUserProfile(true);
-          const photo = await fetchUserPhoto(true);
+          const lastProfileFetch = localStorage.getItem("lastProfileFetch");
+          const now = Date.now();
+          const cacheAge = lastProfileFetch ? now - parseInt(lastProfileFetch) : Infinity;
+          const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+          
+          let profile, photo;
+          
+          // Only fetch if cache is older than 10 minutes
+          if (cacheAge > CACHE_DURATION) {
+            profile = await fetchUserProfile(true);
+            photo = await fetchUserPhoto(true);
+            localStorage.setItem("lastProfileFetch", now.toString());
+          } else {
+            // Use cached values
+            const cachedProfile = localStorage.getItem("cachedProfile");
+            const cachedPhoto = localStorage.getItem("cachedPhoto");
+            profile = cachedProfile ? JSON.parse(cachedProfile) : saved;
+            photo = cachedPhoto ? JSON.parse(cachedPhoto) : null;
+          }
+          
+          // Cache the fetched data
+          if (profile) localStorage.setItem("cachedProfile", JSON.stringify(profile));
+          if (photo) localStorage.setItem("cachedPhoto", JSON.stringify(photo));
+          
           const mergedUser = {
             ...saved,
             ...profile,
@@ -116,6 +144,12 @@ export default function App() {
   }, []);
 
   function handleLogin(userData) {
+    // Clear all cached state from previous account before logging in new user
+    setHostedEvents([]);
+    setEditingEvent(null);
+    setSelectedEvent(null);
+    setEventSourceRoute(null);
+    
     scheduleTokenExpiryLogout(getToken());
     scheduleIdleLogout();
     // Fetch full profile data after login and wait for it to complete
@@ -180,8 +214,23 @@ export default function App() {
     setEventSourceRoute(null);
   }
 
-  const routeEvent = location.state?.event;
-  const detailEvent = selectedEvent || routeEvent;
+  function EventDetailRoute({ selectedEvent, onBack, currentUser, onEditEvent }) {
+    const params = useParams();
+    const location = useLocation();
+    const routeEvent = location.state?.event;
+    const detailEvent = selectedEvent || routeEvent || (params?.id ? { id: Number(params.id) } : null);
+
+    return detailEvent ? (
+      <EventDetailPage
+        event={detailEvent}
+        onBack={onBack}
+        currentUser={currentUser}
+        onEditEvent={onEditEvent}
+      />
+    ) : (
+      <Navigate to={ROUTES.home} replace />
+    );
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -254,7 +303,7 @@ export default function App() {
           path="/home"
           element={
             <ProtectedRoute user={user}>
-              <HomePage {...sharedProps} hostedEvents={hostedEvents} onViewEvent={handleViewEvent} />
+              <HomePage key={user?.id} {...sharedProps} hostedEvents={hostedEvents} onViewEvent={handleViewEvent} />
             </ProtectedRoute>
           }
         />
@@ -309,11 +358,12 @@ export default function App() {
           path="/events/:id"
           element={
             <ProtectedRoute user={user}>
-              {detailEvent ? (
-                <EventDetailPage event={detailEvent} onBack={handleBackFromEvent} currentUser={user} onEditEvent={handleEditEvent} />
-              ) : (
-                <Navigate to={ROUTES.home} replace />
-              )}
+              <EventDetailRoute
+                selectedEvent={selectedEvent}
+                onBack={handleBackFromEvent}
+                currentUser={user}
+                onEditEvent={handleEditEvent}
+              />
             </ProtectedRoute>
           }
         />

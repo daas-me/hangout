@@ -84,6 +84,37 @@
   cursor: pointer;
 }
 
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.filterBtn,
+.filterBtnActive {
+  padding: 10px 18px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #13131f;
+  color: #c7d2fe;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.filterBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.filterBtnActive {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7c3aed 0%, #e040fb 100%);
+  color: white;
+}
+
 /* ── List ── */
 .list {
   display: flex;
@@ -99,6 +130,11 @@
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 16px;
   overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .cardGroup {
@@ -112,6 +148,7 @@
   position: relative;
   height: 100%;
   min-height: 260px;
+  overflow: hidden;
 }
 
 .img {
@@ -119,6 +156,11 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.4s ease-out;
+}
+
+.card:hover .img {
+  transform: scale(1.08);
 }
 
 .imgDefault {
@@ -155,6 +197,47 @@
 /* ── Draft card — subtle amber border ── */
 .cardDraft {
   border-color: rgba(245, 158, 11, 0.3);
+}
+
+.cardCompleted {
+  position: relative;
+  border-color: rgba(168, 85, 247, 0.8);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.99) 100%);
+  box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.12), 0 18px 40px rgba(168, 85, 247, 0.12);
+}
+
+.cardCompleted::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #a855f7 0%, #d946ef 100%);
+}
+
+.completedBadge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #a855f7 0%, #d946ef 100%);
+  color: white;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+  letter-spacing: 0.5px;
+}
+
+.completedNote {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  color: #c7d2fe;
+  margin: 0;
+  line-height: 1.5;
 }
 
 /* ── Draft image dimming overlay ── */
@@ -232,6 +315,19 @@
   font-weight: 700;
   color: #f0eeff;
   line-height: 1.25;
+}
+
+.cardTitleLink {
+  all: unset;
+  cursor: pointer;
+  display: inline-block;
+  color: inherit;
+  text-align: left;
+}
+
+.cardTitleLink:hover .cardTitle,
+.cardTitleLink:focus-visible .cardTitle {
+  text-decoration: underline;
 }
 
 /* ── Info grid ── */
@@ -602,6 +698,142 @@
   transition: opacity 0.2s;
 }
 .emptyBtn:hover { opacity: 0.9; }
+
+/* ── Status Badges (Unified) ── */
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(4px);
+}
+
+.statusBadge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Hosting Status Badges */
+.statusDraft {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.08) 100%);
+  border: 1.5px solid rgba(245, 158, 11, 0.5);
+  color: #f59e0b;
+}
+
+.statusPublished {
+  background: linear-gradient(135deg, #7c3aed 0%, #e040fb 100%);
+  color: white;
+  border: 1.5px solid rgba(224, 64, 251, 0.6);
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.statusPublished::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  pointer-events: none;
+}
+
+.statusPublished:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border-color: rgba(224, 64, 251, 0.8);
+}
+
+.statusCompleted {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0.08) 100%);
+  border: 1.5px solid rgba(168, 85, 247, 0.5);
+  color: #a855f7;
+}
+
+/* Attending Status Badges */
+.statusConfirmed {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.08) 100%);
+  border: 1.5px solid rgba(16, 185, 129, 0.4);
+  color: #10b981;
+}
+
+.statusPending {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(251, 191, 36, 0.08) 100%);
+  border: 1.5px solid rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+}
+
+.statusPendingRefund {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.08) 100%);
+  border: 1.5px solid rgba(245, 158, 11, 0.35);
+  color: #f59e0b;
+}
+
+.statusRejected {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%);
+  border: 1.5px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+
+.statusCancelled {
+  background: linear-gradient(135deg, rgba(107, 114, 128, 0.15) 0%, rgba(107, 114, 128, 0.08) 100%);
+  border: 1.5px solid rgba(107, 114, 128, 0.35);
+  color: #6b7280;
+}
+
+.statusDeleted {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
+  border: 1.5px solid rgba(139, 92, 246, 0.35);
+  color: #8b5cf6;
+}
+
+.statusRsvpCancelled {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.15) 0%, rgba(236, 72, 153, 0.08) 100%);
+  border: 1.5px solid rgba(236, 72, 153, 0.35);
+  color: #ec4899;
+}
+
+/* ── Status Left Accents ── */
+.accentGreen {
+  border-left: 3px solid #10b981;
+}
+
+.accentYellow {
+  border-left: 3px solid #fbbf24;
+}
+
+.accentOrange {
+  border-left: 3px solid #f59e0b;
+}
+
+.accentRed {
+  border-left: 3px solid #ef4444;
+}
+
+.accentCyan {
+  border-left: 3px solid #0ea5e9;
+}
+
+.accentGray {
+  border-left: 3px solid #6b7280;
+}
+
+.accentPurple {
+  border-left: 3px solid #8b5cf6;
+}
+
+.accentPink {
+  border-left: 3px solid #ec4899;
+}
 
 /* ── Skeletons ── */
 .skeletonCard {
