@@ -2,7 +2,7 @@ package com.hangout.app.user.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.hangout.app.user.model.UserEntity;
+import com.hangout.app.user.entity.UserEntity;
 
 import java.util.Optional;
 

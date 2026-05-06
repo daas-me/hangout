@@ -281,12 +281,17 @@
   cursor: pointer;
 }
 
-.hostingImgWrap { position: relative; height: 240px; }
+.hostingImgWrap { position: relative; height: 240px; overflow: hidden; }
 
 .hostingImg {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.4s ease-out;
+}
+
+.hostingCard:hover .hostingImg {
+  transform: scale(1.08);
 }
 
 .hostingImgFallback {
@@ -364,16 +369,19 @@
   overflow: hidden;
   position: relative;
   cursor: pointer;
-  transition: transform 0.2s;
 }
-.todayCard:hover { transform: scale(1.02); }
 
-.todayImgWrap { position: relative; height: 192px; }
+.todayImgWrap { position: relative; height: 192px; overflow: hidden; }
 
 .todayImg {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.4s ease-out;
+}
+
+.todayCard:hover .todayImg {
+  transform: scale(1.08);
 }
 
 .todayImgFallback {

@@ -425,8 +425,11 @@
   color: #e9d5ff;
 }
 .manageBtn:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.1);
+  color: #8b93aa;
 }
 .manageBtnDanger:hover {
   border-color: rgba(239,68,68,0.5);
@@ -454,6 +457,78 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: #fecaca;
+}
+.completedBadgeHero {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background: rgba(99,102,241,0.16);
+  border: 1px solid rgba(129,140,248,0.3);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #c7d2fe;
+}
+.completedBanner {
+  max-width: 960px;
+  margin: 0 auto 24px;
+  padding: 18px 22px;
+  border-radius: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  background: rgba(79,70,229,0.08);
+  border: 1px solid rgba(129,140,248,0.25);
+}
+.completedBadgeIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(129,140,248,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c7d2fe;
+  flex-shrink: 0;
+}
+.completedTitle {
+  font-family: 'Syne', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #c7d2fe;
+  margin: 0 0 4px;
+}
+.completedSubtitle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.92rem;
+  color: #dbeafe;
+  line-height: 1.7;
+  margin: 0;
+}
+.rsvpBarCompleted {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 48px;
+  background: rgba(10,10,28,0.96);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(99,102,241,0.18);
+  gap: 16px;
+}
+.rsvpBtnCompleted {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  box-shadow: 0 4px 24px rgba(99,102,241,0.32);
+}
+.manageBarCompleted {
+  background: rgba(15,15,36,0.94);
+  border-top: 1px solid rgba(99,102,241,0.16);
 }
 
 /* ── Error message ── */

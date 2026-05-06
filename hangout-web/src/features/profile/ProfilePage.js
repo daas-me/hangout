@@ -142,6 +142,7 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
   const [passwordMsg, setPasswordMsg]     = useState(null);
   const [savingPw, setSavingPw]           = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
 
   const fileRef = useRef();
@@ -332,8 +333,8 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
               {/* Stats */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
                 {[
-                  { icon: Calendar,   label: 'Events Hosting',   value: stats.hostingCount,   bg: 'rgba(168,85,247,0.1)',  iconColor: '#a855f7' },
-                  { icon: Users,      label: 'Events Attending', value: stats.attendingCount, bg: 'rgba(168,85,247,0.1)',  iconColor: '#a855f7' },
+                  { icon: Calendar,   label: 'HangOuts Hosting',   value: stats.hostingCount,   bg: 'rgba(168,85,247,0.1)',  iconColor: '#a855f7' },
+                  { icon: Users,      label: 'HangOuts Attending', value: stats.attendingCount, bg: 'rgba(168,85,247,0.1)',  iconColor: '#a855f7' },
                   { icon: TrendingUp, label: 'Total Attendees',  value: stats.totalAttendees, bg: 'rgba(236,72,153,0.1)', iconColor: '#ec4899' },
                 ].map(({ icon: Icon, label, value, bg, iconColor }) => (
                   <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 12, background: bg }}>
@@ -618,12 +619,14 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
       <Modal show={showLogoutConfirm} onClose={() => setShowLogoutConfirm(false)} title="Confirm Sign Out">
         <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.7 }}>Are you sure you want to sign out from this account?</p>
         <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-          <button onClick={() => { setShowLogoutConfirm(false); onLogout(); }}
-            style={{ flex: 1, padding: '13px', borderRadius: 12, background: '#ef4444', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
-            Sign Out
+          <button onClick={() => { setLoggingOut(true); setTimeout(() => onLogout(), 500); }}
+            disabled={loggingOut}
+            style={{ flex: 1, padding: '13px', borderRadius: 12, background: loggingOut ? '#b91c1c' : '#ef4444', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: loggingOut ? 'not-allowed' : 'pointer' }}>
+            {loggingOut ? 'Signing out...' : 'Sign Out'}
           </button>
           <button onClick={() => setShowLogoutConfirm(false)}
-            style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            disabled={loggingOut}
+            style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: loggingOut ? 'not-allowed' : 'pointer' }}>
             Cancel
           </button>
         </div>

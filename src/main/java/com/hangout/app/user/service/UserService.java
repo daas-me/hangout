@@ -1,6 +1,6 @@
 package com.hangout.app.user.service;
 
-import com.hangout.app.user.model.UserEntity;
+import com.hangout.app.user.entity.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import com.hangout.app.event.repository.EventRepository;
 import com.hangout.app.shared.utils.JwtUtils;

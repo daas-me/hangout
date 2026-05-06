@@ -31,6 +31,35 @@ function formatTo12Hour(time24) {
   return `${displayHours}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+function parseEventEndDate(event) {
+  if (!event?.date) return null;
+
+  const dateStr = event._rawDate || event.date;
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const timeStr = event.endTime || event.startTime || event.time;
+  if (!timeStr || timeStr === '—') {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
+  }
+
+  const [hours, minutes] = timeStr.split(':').map((part) => parseInt(part, 10));
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59);
+  }
+
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes, 59);
+}
+
+function hasEventPassed(event) {
+  const endDate = parseEventEndDate(event);
+  return endDate ? endDate < new Date() : false;
+}
+
+function isNonCompletedPublished(event) {
+  return event?.isDraft !== true && event?.eventStatus !== 'completed' && !hasEventPassed(event);
+}
+
 function normalise(event) {
   // Build time range: prefer start/end times, fallback to time, then default to '—'
   let timeDisplay = '—';
@@ -43,10 +72,32 @@ function normalise(event) {
   } else if (event.time) {
     timeDisplay = formatTo12Hour(event.time);
   }
+
+  const attendeeCount = (() => {
+    if (event?.attendees && typeof event.attendees === 'object') {
+      return typeof event.attendees.current === 'number' ? event.attendees.current : 0;
+    }
+    if (typeof event.attendeeCount === 'number') return event.attendeeCount;
+    if (typeof event.attendees === 'string') {
+      const match = event.attendees.match(/(\d+)/);
+      return match ? Number(match[1]) : 0;
+    }
+    return 0;
+  })();
+
+  const attendeesLabel = (() => {
+    if (event?.attendees && typeof event.attendees === 'object') {
+      return `${event.attendees.current ?? 0} attending`;
+    }
+    if (typeof event.attendees === 'string') {
+      return event.attendees;
+    }
+    return `${attendeeCount} attending`;
+  })();
   
   return {
     id:           event.id,
-    title:        event.title        || 'Untitled Event',
+    title:        event.title        || 'Untitled HangOut',
     date:         event.date         || '—',
     time:         timeDisplay,
     location:     event.location     || 'Location not set',
@@ -54,19 +105,8 @@ function normalise(event) {
     imageUrl:     event.imageUrl     || null,
     isTrending:   event.isTrending   || false,
     price:        event.price        ?? 0,
-    attendeesLabel: (() => {
-      if (typeof event.attendees === 'object' && event.attendees !== null)
-        return `${event.attendees.current ?? 0} attending`;
-      if (typeof event.attendees === 'number')
-        return `${event.attendees} attending`;
-      return '0 attending';
-    })(),
-    attendeeCount: (() => {
-      if (typeof event.attendeeCount === 'number') return event.attendeeCount;
-      if (typeof event.attendees === 'object') return event.attendees?.current ?? 0;
-      if (typeof event.attendees === 'number') return event.attendees;
-      return 0;
-    })(),
+    attendeesLabel,
+    attendeeCount,
     capacity: event.capacity ?? event.attendees?.max ?? 0,
   };
 }
@@ -80,11 +120,12 @@ export default function HomePage({ user, onLogout, onNavigate, hostedEvents = []
   const [loadingToday,   setLoadingToday]   = useState(true);
   const [loadingStats,   setLoadingStats]   = useState(true);
 
+  // Initial fetch on mount
   useEffect(() => {
     getHostingEvents()
       .then(events => {
-        // Filter to only show published (non-draft) events
-        const publishedEvents = events.filter(e => e.isDraft !== true);
+        // Filter to only show published, non-completed hosted events
+        const publishedEvents = events.filter(isNonCompletedPublished);
         setApiHostingEvent(publishedEvents[0] ?? null);
       })
       .catch(() => {})
@@ -101,8 +142,41 @@ export default function HomePage({ user, onLogout, onNavigate, hostedEvents = []
       .finally(() => setLoadingStats(false));
   }, [hostedEvents]);
 
-  // Only published (non-draft) local events for the "You're Hosting" card
-  const publishedLocal = hostedEvents.filter(e => e.isDraft !== true);
+  // Auto-refresh every 4 seconds to pick up RSVP updates from other pages
+  useEffect(() => {
+    let refreshInterval;
+    let failureCount = 0;
+    const maxFailures = 5;
+
+    const performRefresh = () => {
+      // Only refresh data, don't show loading states
+      Promise.all([
+        getHostingEvents(true).then(events => {
+          const publishedEvents = events.filter(isNonCompletedPublished);
+          setApiHostingEvent(publishedEvents[0] ?? null);
+        }),
+        getTodayEvents(true).then(setApiTodayEvents),
+        getCalculatedActivityStats(true).then(setStats),
+      ])
+        .then(() => {
+          failureCount = 0; // Reset on success
+        })
+        .catch(err => {
+          console.warn('[HomePage] Auto-refresh failed:', err);
+          failureCount++;
+          if (failureCount >= maxFailures) {
+            console.warn('[HomePage] Stopping auto-refresh after repeated failures');
+            clearInterval(refreshInterval);
+          }
+        });
+    };
+
+    refreshInterval = setInterval(performRefresh, 4000);
+    return () => clearInterval(refreshInterval);
+  }, []);
+
+  // Only published, non-completed local events for the "You're Hosting" card
+  const publishedLocal = hostedEvents.filter(isNonCompletedPublished);
   
   // Local published events happening today
   const localTodayEvents = publishedLocal.filter(e => {
@@ -112,12 +186,13 @@ export default function HomePage({ user, onLogout, onNavigate, hostedEvents = []
   });
 
   // Merge today events — local published first, then API (deduplicated)
+  const publishedTodayApiEvents = apiTodayEvents.filter(isNonCompletedPublished);
   const todayEvents = [
     ...localTodayEvents,
-    ...apiTodayEvents.filter(e => !localTodayEvents.find(l => l.id === e.id)),
+    ...publishedTodayApiEvents.filter(e => !localTodayEvents.find(l => l.id === e.id)),
   ];
 
-  // First published local event for the You're Hosting card
+  // First published, non-completed local event for the You're Hosting card
   const localHostingEvent = publishedLocal[0] ?? null;
 
   return (
