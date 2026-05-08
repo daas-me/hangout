@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Navbar } from '../../shared/components/Navbar';
-import { Search, Calendar, MapPin, Users, Filter, Binoculars, Clock, Heart } from 'lucide-react';
+import { Search, Calendar, MapPin, Users, Filter, Binoculars, Clock } from 'lucide-react';
 import { getDiscoverEvents } from './discoverApi';
-import { addFavorite, removeFavorite, checkIsFavorite } from '../events/favoriteApi';
+import { checkIsFavorite } from '../events/favoriteApi';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
 import { Modal } from '../../shared/components/Modal';
-import { Toast } from '../../shared/components/Toast';
 import s from '../../styles/DiscoverPage.module.css';
 
 const FILTERS = [
@@ -24,19 +23,8 @@ export default function DiscoverPage({ user, onLogout, onNavigate, onViewEvent }
   const [search,  setSearch]  = useState('');
   const [filter,  setFilter]  = useState('all');
   const [favoriteStates, setFavoriteStates] = useState({}); // { eventId: liked }
-  const [toasts, setToasts] = useState([]);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [limitModalMessage, setLimitModalMessage] = useState('');
-
-  const addToast = (message, type = 'info', duration = 3000) => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    if (duration > 0) {
-      setTimeout(() => {
-        setToasts(prev => prev.filter(t => t.id !== id));
-      }, duration);
-    }
-  };
+  const [limitModalMessage] = useState('You can only save up to 10 events');
 
   const isEventCompleted = useCallback((event) => {
     if (event?.eventStatus === 'completed') return true;
@@ -129,41 +117,6 @@ export default function DiscoverPage({ user, onLogout, onNavigate, onViewEvent }
     checkFavorites();
   }, [events, user]);
 
-  const handleFavoriteToggle = async (event) => {
-    if (!user) {
-      addToast('Please log in to save favorites', 'warning');
-      return;
-    }
-
-    const eventId = event.id;
-    const isLiked = favoriteStates[eventId];
-    const newState = !isLiked;
-
-    // Optimistic update
-    setFavoriteStates(prev => ({ ...prev, [eventId]: newState }));
-
-    try {
-      if (newState) {
-        await addFavorite(eventId);
-        addToast('Added to favorites', 'success');
-      } else {
-        await removeFavorite(eventId);
-        addToast('Removed from favorites', 'success');
-      }
-    } catch (err) {
-      // Revert on error
-      setFavoriteStates(prev => ({ ...prev, [eventId]: isLiked }));
-
-      if (err.status === 409 || err.message?.includes('409')) {
-        const message = err.error?.message || 'You can only save up to 10 events';
-        setLimitModalMessage(message);
-        setShowLimitModal(true);
-      } else {
-        addToast(err.error?.message || 'Failed to update favorite', 'error');
-      }
-    }
-  };
-
   return (
     <div className={s.page}>
       <Navbar user={user} onLogout={onLogout} onNavigate={onNavigate} activePage="discover" />
@@ -218,23 +171,11 @@ export default function DiscoverPage({ user, onLogout, onNavigate, onViewEvent }
                 event={event} 
                 onClick={() => onViewEvent(event)}
                 liked={favoriteStates[event.id]}
-                onFavoriteToggle={() => handleFavoriteToggle(event)}
+
               />
             ))}
           </div>
         )}
-
-        {/* Toast Notifications */}
-        <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 9999 }}>
-          {toasts.map(toast => (
-            <Toast
-              key={toast.id}
-              message={toast.message}
-              type={toast.type}
-              onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
-            />
-          ))}
-        </div>
 
         {/* Limit Exceeded Modal */}
         <Modal
@@ -272,7 +213,7 @@ function EmptyDiscover({ search, filter }) {
 }
 
 // ── Event Card ────────────────────────────────────────────────────────────────
-function EventCard({ event, onClick, liked, onFavoriteToggle }) {
+function EventCard({ event, onClick }) {
   return (
     <div className={s.card} onClick={onClick}>
       <div className={s.cardImgWrap}>
@@ -283,23 +224,6 @@ function EventCard({ event, onClick, liked, onFavoriteToggle }) {
             </div>
         }
         <span className={s.formatBadge}>{event.format}</span>
-        <button
-          className={s.favoriteBtn}
-          onClick={e => {
-            e.stopPropagation();
-            onFavoriteToggle?.();
-          }}
-          title={liked ? 'Remove from favorites' : 'Add to favorites'}
-        >
-          <Heart
-            size={20}
-            style={{
-              fill: liked ? '#ec4899' : 'none',
-              color: liked ? '#ec4899' : '#fff',
-              transition: 'all 0.2s'
-            }}
-          />
-        </button>
       </div>
 
       <div className={s.cardBody}>

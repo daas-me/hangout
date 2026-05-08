@@ -1,8 +1,9 @@
 package com.hangout.app.event.service;
 
-import com.hangout.app.event.model.EventEntity;
+import com.hangout.app.event.entity.EventEntity;
 import com.hangout.app.event.repository.EventRepository;
 import com.hangout.app.event.repository.RSVPRepository;
+import com.hangout.app.notification.service.NotificationService;
 import com.hangout.app.user.entity.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,7 @@ public class EventService {
     @Autowired private EventRepository eventRepository;
     @Autowired private UserRepository  userRepository;
     @Autowired private RSVPRepository  rsvpRepository;
+    @Autowired private NotificationService notificationService;
 
     // ── Helper Methods ─────────────────────────────────────────────────────────
 
@@ -146,11 +148,22 @@ public class EventService {
         if (!event.getHost().getId().equals(user.getId()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
 
-        // Mark as deleted instead of permanently deleting, to preserve history for attendees
         event.setEventStatus("deleted");
         event.setEventStatusReason("Host deleted the event");
         event.setUpdatedAt(LocalDateTime.now());
         eventRepository.save(event);
+
+        // Notify all registered guests
+        rsvpRepository.findByEvent(event).stream()
+            .filter(rsvp -> !"cancelled".equals(rsvp.getStatus()))
+            .forEach(rsvp -> notificationService.create(
+                rsvp.getUser(),
+                "EVENT_DELETED",
+                "HangOut Deleted",
+                "The HangOut \"" + event.getTitle() + "\" has been deleted by the host.",
+                event.getId(),
+                "event"
+            ));
     }
 
     // ── Cancel Event (Host cancels an upcoming event) ────────────────────────
@@ -162,10 +175,24 @@ public class EventService {
         if (!event.getHost().getId().equals(user.getId()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
 
-        // Mark as cancelled
         event.setEventStatus("cancelled");
         event.setEventStatusReason(reason != null ? reason : "Event was cancelled by the host");
         event.setUpdatedAt(LocalDateTime.now());
+        eventRepository.save(event);
+
+        // Notify all registered guests
+        String finalReason = reason != null && !reason.isBlank() ? reason : "Event was cancelled by the host";
+        rsvpRepository.findByEvent(event).stream()
+            .filter(rsvp -> !"cancelled".equals(rsvp.getStatus()))
+            .forEach(rsvp -> notificationService.create(
+                rsvp.getUser(),
+                "EVENT_CANCELLED",
+                "HangOut Cancelled",
+                "The HangOut \"" + event.getTitle() + "\" has been cancelled. Reason: " + finalReason,
+                event.getId(),
+                "event"
+            ));
+
         return toResponse(eventRepository.save(event));
     }
 

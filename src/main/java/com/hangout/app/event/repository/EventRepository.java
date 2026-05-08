@@ -1,7 +1,7 @@
     package com.hangout.app.event.repository;
 
-    import com.hangout.app.event.model.EventEntity;
-    import com.hangout.app.user.entity.UserEntity;
+    import com.hangout.app.event.entity.EventEntity;
+import com.hangout.app.user.entity.UserEntity;
 
     import org.springframework.data.jpa.repository.JpaRepository;
     import org.springframework.data.jpa.repository.Query;

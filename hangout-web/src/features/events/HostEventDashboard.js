@@ -166,7 +166,87 @@ function AuthImage({ src, alt, style, className, onClick }) {
   );
 }
 
-export default function HostEventDashboard({ event, onBack, onEditEvent, currentUser }) {
+/* ─────────────────────────────────────────────────────────────────────────────
+   AttendeeProfileModal — shows non-sensitive attendee info and message button
+───────────────────────────────────────────────────────────────────────────── */
+function AttendeeProfileModal({ attendee, onClose, onMessage }) {
+  if (!attendee) return null;
+
+  const formatDate = (d) => d
+    ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'N/A';
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 70,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16, background: 'rgba(0,0,0,0.85)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#13131f', borderRadius: 20, padding: '28px 32px',
+          border: '1px solid rgba(255,255,255,0.1)', width: '100%', maxWidth: 360,
+          textAlign: 'center',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer' }}
+        >
+          <X size={18} />
+        </button>
+
+        {/* Avatar */}
+        <ProfileAvatar person={attendee} name={attendee.name} size={72} />
+
+        {/* Name */}
+        <h2 style={{ color: '#f0eeff', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 20, margin: '14px 0 4px' }}>
+          {attendee.name}
+        </h2>
+
+        {/* Info rows */}
+        <div style={{ marginTop: 16, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[
+            { label: 'Email',       value: attendee.email },
+            { label: 'Seat',        value: attendee.seatNumber || 'N/A' },
+            { label: 'Registered',  value: formatDate(attendee.registeredAt) },
+            { label: 'Status',      value: attendee.paymentStatus === 'confirmed' ? 'Confirmed' : 'Pending' },
+          ].map(({ label, value }) => (
+            <div key={label} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.03)',
+            }}>
+              <span style={{ color: '#6b7280', fontFamily: 'DM Sans, sans-serif', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+              <span style={{ color: '#e5e7eb', fontFamily: 'DM Sans, sans-serif', fontSize: 13, fontWeight: 500 }}>{value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Message button */}
+        <button
+          onClick={() => { onMessage(attendee); onClose(); }}
+          style={{
+            marginTop: 20, width: '100%',
+            padding: '12px', borderRadius: 12, border: 'none',
+            background: 'linear-gradient(135deg, #A855F7, #EC4899)',
+            color: 'white', fontFamily: 'DM Sans, sans-serif',
+            fontWeight: 700, fontSize: 14, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}
+        >
+          <MessageCircle size={16} /> Message {attendee.name.split(' ')[0]}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function HostEventDashboard({ event, onBack, onEditEvent, currentUser, onMessageUser }) {
   const [activeTab, setActiveTab]               = useState('overview');
   const [selectedImage, setSelectedImage]       = useState(null);
   const [attendees, setAttendees]               = useState([]);
@@ -198,6 +278,7 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
   const [rejectionNoteTitle, setRejectionNoteTitle] = useState('Rejection Reason');
   const [showRefundModal, setShowRefundModal]   = useState(false);
   const [selectedRefundRequest, setSelectedRefundRequest] = useState(null);
+  const [profileModalAttendee, setProfileModalAttendee] = useState(null);
   const [refundAction, setRefundAction]         = useState(null);
   const [processingRefund, setProcessingRefund] = useState(false);
   const [refundProofFile, setRefundProofFile]   = useState(null);
@@ -451,7 +532,7 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
         await rejectRefund(event.id, selectedRefundRequest.id, rejectionReason);
         setAttendees(prev => prev.map(a =>
           a.id === selectedRefundRequest.id
-            ? { ...a, refundStatus: 'rejected', refundRejectionReason: rejectionReason }
+            ? { ...a, refundStatus: 'rejected', refundRejectionReason: rejectionReason, status: 'cancelled' }
             : a
         ));
       }
@@ -880,8 +961,19 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
                                   >
                                     <CheckCircle size={14} /> Approve
                                   </button>
-                                  <button
-                                    onClick={() => { setSelectedRefundRequest(request); setRefundAction('reject'); setRefundError(null); setRefundProofFile(null); setRejectionReason(''); setShowRefundModal(true); }}
+                                 <button
+                                    onClick={() => { 
+                                        setSelectedRefundRequest(request); 
+                                        setRefundAction('reject'); 
+                                        setRefundError(null); 
+                                        setRefundProofFile(null); 
+                                        setRejectionReason(
+                                            request.attendeeRejectionType === 'no_refund_policy'
+                                                ? 'This event has a no-refund policy. Your ticket payment cannot be refunded.'
+                                                : ''
+                                        ); 
+                                        setShowRefundModal(true); 
+                                    }}
                                     style={{
                                       display: 'flex', alignItems: 'center', gap: 8,
                                       padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(239,68,68,0.3)',
@@ -991,9 +1083,12 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
                               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                             >
                               {/* Attendee */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                              <div 
+                                style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, cursor: 'pointer' }}
+                                onClick={() => setProfileModalAttendee(a)}
+                              >
                                 <ProfileAvatar person={a} name={a.name} size={40} />
-                                <span style={{ color: 'white', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                                <span style={{ color: 'white', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline', textDecorationColor: 'rgba(168,85,247,0.5)' }}>{a.name}</span>
                               </div>
                               
                               {/* Email */}
@@ -1751,6 +1846,22 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
           </div>
         </div>
       )}
+
+      {/* ── Attendee Profile Modal ── */}
+      <AttendeeProfileModal
+        attendee={profileModalAttendee}
+        onClose={() => setProfileModalAttendee(null)}
+        onMessage={(attendee) => {
+          onMessageUser?.({
+            id:        attendee.userId,
+            firstname: attendee.firstname || attendee.name?.split(' ')[0] || '',
+            lastname:  attendee.lastname  || attendee.name?.split(' ').slice(1).join(' ') || '',
+            email:     attendee.email,
+            photo:     attendee.photo || attendee.photoUrl || null,
+          });
+          setProfileModalAttendee(null);
+        }}
+      />
 
       {/* ── Delete modal ── */}
       <Modal isOpen={showDeleteModal} title="Delete HangOut" message="Are you sure you want to delete this HangOut? This action cannot be undone." confirmText="Delete" cancelText="Cancel" isDanger={true} isLoading={deleting} onConfirm={confirmDelete} onCancel={() => setShowDeleteModal(false)} />

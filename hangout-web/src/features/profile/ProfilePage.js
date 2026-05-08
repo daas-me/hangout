@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Navbar } from '../../shared/components/Navbar';
 import {
   Camera, Calendar, Users, TrendingUp, ChevronRight,
-  User, Bell, Mail, Settings, LogOut, HelpCircle,
+  User, Bell, Mail, Settings, LogOut,
   Phone, MapPin, CheckCircle2, CreditCard, IdCard,
   Lock, Save, CheckCircle, AlertCircle, X, Trash2, Upload
 } from 'lucide-react';
@@ -495,11 +495,6 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
           </div>
         </div>
       </main>
-
-      {/* Help Button */}
-      <button style={{ position: 'fixed', bottom: 32, right: 32, width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg, #A855F7 0%, #EC4899 100%)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(168,85,247,0.5)' }}>
-        <HelpCircle size={24} />
-      </button>
 
       {/* ── Edit Profile Modal ── */}
       <Modal show={showEditProfile} onClose={() => { setShowEditProfile(false); setProfileMsg(null); }} title="Edit Profile">

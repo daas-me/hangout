@@ -5,7 +5,7 @@ import { Toast } from '../../shared/components/Toast';
 import {
   Upload, Calendar, Clock, FileText, Type, MapPin, Users,
   Armchair, Ticket, CreditCard, Building2, Eye, Send,
-  Save, Laptop, Tag, HelpCircle, X, User
+  Save, Laptop, Tag, X, User
 } from 'lucide-react';
 import { formatTo12Hour } from '../../shared/utils/timeFormatter';
 import s from '../../styles/CreateEventPage.module.css';
@@ -550,7 +550,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
                     value={form.accountNumber} onChange={e => set('accountNumber', e.target.value)} />
                 </div>
                 <div className={s.fieldGroup}>
-                  <label className={s.fieldLabel}><HelpCircle size={16} className={s.fieldIcon} /> REFUND POLICY</label>
+                  <label className={s.fieldLabel}>REFUND POLICY</label>
                   <div className={s.toggleWrap}>
                     <label className={s.toggleLabel}>
                       <input
@@ -763,8 +763,6 @@ function PreviewPage({ form, coverImage, user, isEditing, initialEvent, onBack, 
           </div>
         </div>
       </div>
-
-      <button className={s.pvHelpBtn}><HelpCircle size={24} color="white" /></button>
 
       {toastMessage && <Toast message={toastMessage.message} type={toastMessage.type} onClose={() => setToastMessage(null)} />}
     </div>

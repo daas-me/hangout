@@ -36,7 +36,7 @@ public class SecurityConfig {
             "http://127.0.0.1:3001",
             "http://127.0.0.1:8000"
         ));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
@@ -66,6 +66,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/events/location/search").permitAll()
                 .requestMatchers("/api/events/*").permitAll()
                 .requestMatchers("/api/events/*/rsvp/verify/*").permitAll()
+                .requestMatchers("/api/notifications/**").authenticated()
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             )
