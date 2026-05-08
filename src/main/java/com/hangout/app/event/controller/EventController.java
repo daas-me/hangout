@@ -2,6 +2,7 @@ package com.hangout.app.event.controller;
 
 import com.hangout.app.event.service.EventService;
 import com.hangout.app.event.service.RSVPService;
+import com.hangout.app.event.service.FavoriteService;
 import com.hangout.app.shared.utils.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,7 @@ public class EventController {
 
     @Autowired private EventService eventService;
     @Autowired private RSVPService   rsvpService;
+    @Autowired private FavoriteService favoriteService;
     @Autowired private JwtUtils      jwtUtils;
 
     // Get authenticated email from SecurityContextHolder (set by JwtFilter)
@@ -206,6 +208,26 @@ public class EventController {
         return ResponseEntity.ok(rsvpService.rejectAttendee(getAuthenticatedEmail(), id, rsvpId, body != null ? body : Map.of()));
     }
 
+    @PostMapping("/{id}/rsvp/{rsvpId}/attendance-status")
+    public ResponseEntity<?> updateAttendanceStatus(@PathVariable Long id,
+                                                    @PathVariable Long rsvpId,
+                                                    @RequestBody(required = false) Map<String, Object> body) {
+        return ResponseEntity.ok(rsvpService.updateAttendanceStatus(getAuthenticatedEmail(), id, rsvpId, body != null ? body : Map.of()));
+    }
+
+    @PostMapping("/{id}/rsvp/{rsvpId}/assign-seat")
+    public ResponseEntity<?> assignSeat(@PathVariable Long id,
+                                        @PathVariable Long rsvpId,
+                                        @RequestBody(required = false) Map<String, Object> body) {
+        return ResponseEntity.ok(rsvpService.assignSeat(getAuthenticatedEmail(), id, rsvpId, body != null ? body : Map.of()));
+    }
+
+    @GetMapping("/{id}/rsvp/verify/{ticketToken}")
+    public ResponseEntity<?> verifyTicket(@PathVariable Long id,
+                                          @PathVariable String ticketToken) {
+        return ResponseEntity.ok(rsvpService.verifyTicket(id, ticketToken));
+    }
+
     // ── Refund Endpoints ──────────────────────────────────────────────────
 
     @PostMapping("/{id}/rsvp/refund")
@@ -383,5 +405,32 @@ public class EventController {
         if (lower.endsWith(".webp")) return "image/webp";
         if (lower.endsWith(".heic")) return "image/heic";
         return "image/jpeg";
+    }
+
+    // ── Favorites ──────────────────────────────────────────────────────────────
+
+    @PostMapping("/{id}/favorite")
+    public ResponseEntity<?> addFavorite(@PathVariable Long id) {
+        return ResponseEntity.ok(favoriteService.addFavorite(getAuthenticatedEmail(), id));
+    }
+
+    @DeleteMapping("/{id}/favorite")
+    public ResponseEntity<?> removeFavorite(@PathVariable Long id) {
+        return ResponseEntity.ok(favoriteService.removeFavorite(getAuthenticatedEmail(), id));
+    }
+
+    @GetMapping("/favorites/list")
+    public ResponseEntity<?> getUserFavorites() {
+        return ResponseEntity.ok(favoriteService.getUserFavorites(getAuthenticatedEmail()));
+    }
+
+    @GetMapping("/{id}/favorite/check")
+    public ResponseEntity<?> checkIsFavorite(@PathVariable Long id) {
+        return ResponseEntity.ok(favoriteService.checkIsFavorite(getAuthenticatedEmail(), id));
+    }
+
+    @GetMapping("/favorites/count")
+    public ResponseEntity<?> getFavoriteCount() {
+        return ResponseEntity.ok(favoriteService.getFavoriteCount(getAuthenticatedEmail()));
     }
 }

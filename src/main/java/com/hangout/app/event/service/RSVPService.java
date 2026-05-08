@@ -181,6 +181,7 @@ public class RSVPService {
                 map.put("price",       event.getPrice());
                 map.put("capacity",    event.getCapacity());
                 map.put("isDraft",     event.getIsDraft());
+                map.put("noRefundPolicy", event.getNoRefundPolicy());
                 // Event status fields (for cancellation/deletion display)
                 map.put("eventStatus",       event.getEventStatus());
                 map.put("eventStatusReason", event.getEventStatusReason());
@@ -371,6 +372,53 @@ public class RSVPService {
         updateEventAttendeeCount(event);
 
         return toRsvpResponse(rsvp);
+    }
+
+    public Map<String, Object> updateAttendanceStatus(String email, Long eventId, Long rsvpId, Map<String, Object> body) {
+        UserEntity user = findUserOrThrow(email);
+        EventEntity event = findEventOrThrow(eventId);
+
+        if (!event.getHost().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to update attendance status");
+        }
+
+        RSVPEntity rsvp = rsvpRepository.findById(rsvpId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
+
+        if (!rsvp.getEvent().getId().equals(eventId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RSVP does not belong to this event");
+        }
+
+        String attendanceStatus = body != null ? (String) body.get("attendanceStatus") : null;
+        if (attendanceStatus == null || attendanceStatus.trim().isEmpty()) {
+            attendanceStatus = "unmarked";
+        }
+        attendanceStatus = attendanceStatus.trim().toLowerCase();
+
+        switch (attendanceStatus) {
+            case "unmarked":
+                rsvp.setAttendeeStatus(null);
+                rsvp.setAttendeeRejectionReason(null);
+                rsvp.setAttendeeRejectionType(null);
+                break;
+            case "attended":
+                rsvp.setAttendeeStatus("attended");
+                rsvp.setAttendeeRejectionReason(null);
+                rsvp.setAttendeeRejectionType(null);
+                break;
+            case "no_show":
+            case "no-show":
+                rsvp.setAttendeeStatus("no_show");
+                rsvp.setAttendeeRejectionReason(null);
+                rsvp.setAttendeeRejectionType(null);
+                break;
+            default:
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid attendance status");
+        }
+
+        rsvp.setUpdatedAt(LocalDateTime.now());
+        rsvpRepository.save(rsvp);
+        return toAttendeeResponse(rsvp);
     }
 
     // ── Remove Attendee from List (Host removes from history) ────────────────────
@@ -686,6 +734,35 @@ public class RSVPService {
         return map;
     }
 
+    // ── Assign Seat ───────────────────────────────────────────────────────────
+
+    public Map<String, Object> assignSeat(String email, Long eventId, Long rsvpId, Map<String, Object> body) {
+        UserEntity user = findUserOrThrow(email);
+        EventEntity event = findEventOrThrow(eventId);
+
+        if (!event.getHost().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to assign seats");
+        }
+
+        RSVPEntity rsvp = rsvpRepository.findById(rsvpId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
+
+        if (!rsvp.getEvent().getId().equals(eventId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RSVP does not belong to this event");
+        }
+
+        String seatNumber = body != null ? (String) body.get("seatNumber") : null;
+        if (seatNumber == null || seatNumber.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Seat number cannot be empty");
+        }
+
+        rsvp.setSeatNumber(seatNumber.trim());
+        rsvp.setUpdatedAt(LocalDateTime.now());
+        rsvpRepository.save(rsvp);
+
+        return toAttendeeResponse(rsvp);
+    }
+
     private Map<String, Object> toAttendeeResponse(RSVPEntity rsvp) {
         Map<String, Object> map = new HashMap<>();
         map.put("id",            rsvp.getId());
@@ -703,6 +780,44 @@ public class RSVPService {
         map.put("attendeeStatus", rsvp.getAttendeeStatus());
         map.put("attendeeRejectionReason", rsvp.getAttendeeRejectionReason());
         map.put("attendeeRejectionType", rsvp.getAttendeeRejectionType());
+        return map;
+    }
+
+    // ── Verify Ticket (QR Code Verification) ──────────────────────────────────
+
+    public Map<String, Object> verifyTicket(Long eventId, String ticketToken) {
+        // ticketToken format: "TKT-{rsvpId}"
+        if (!ticketToken.startsWith("TKT-")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid ticket format");
+        }
+
+        Long rsvpId;
+        try {
+            rsvpId = Long.parseLong(ticketToken.substring(4));
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid ticket ID");
+        }
+
+        RSVPEntity rsvp = rsvpRepository.findById(rsvpId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ticket not found"));
+
+        if (!rsvp.getEvent().getId().equals(eventId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ticket does not belong to this event");
+        }
+
+        EventEntity event = rsvp.getEvent();
+        Map<String, Object> map = new HashMap<>();
+        map.put("valid",           true);
+        map.put("ticketNumber",    "TKT-" + rsvp.getId());
+        map.put("seatNumber",      rsvp.getSeatNumber());
+        map.put("status",          rsvp.getStatus());
+        map.put("paymentStatus",   rsvp.getPaymentStatus());
+        map.put("attendeeStatus",  rsvp.getAttendeeStatus());
+        map.put("guestName",       rsvp.getUser().getFirstname() + " " + rsvp.getUser().getLastname());
+        map.put("guestEmail",      rsvp.getUser().getEmail());
+        map.put("eventTitle",      event.getTitle());
+        map.put("eventDate",       event.getDate() != null ? event.getDate().toString() : null);
+        map.put("registeredAt",    rsvp.getRegisteredAt());
         return map;
     }
 }

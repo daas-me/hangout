@@ -2,14 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Users, CheckCircle, X,
   Clock3, Edit, Share2, MoreVertical, BarChart3, TrendingUp,
-  AlertCircle, AlertTriangle, Download, Trash2, Eye, EyeOff, ImageOff, Image, MessageCircle
+  AlertCircle, AlertTriangle, Download, Trash2, Eye, EyeOff, ImageOff, Image, MessageCircle, Check
 } from 'lucide-react';
 import { Modal } from '../../shared/components/Modal';
 import s from '../../styles/HostEventDashboard.module.css';
 import { API_BASE, getAuthHeaders } from '../../shared/api/apiClient';
 import {
-  getEventAttendees, approvePayment, rejectPayment, rejectAttendee,
-  unpublishEvent, deleteEvent as deleteEventApi, approveRefund, rejectRefund
+  getEventAttendees, approvePayment, rejectPayment, rejectAttendee, updateAttendanceStatus,
+  unpublishEvent, deleteEvent as deleteEventApi, approveRefund, rejectRefund, assignSeat
 } from '../events/eventsApi';
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -184,8 +184,11 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
   const [selectedPaymentForReject, setSelectedPaymentForReject] = useState(null);
   const [approvingPayment, setApprovingPayment] = useState(false);
   const [rejectingPayment, setRejectingPayment] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [savingAttendanceId, setSavingAttendanceId] = useState(null);
+  const [openDropdownId, setOpenDropdownId] = useState(null);
   const [, setRejectionNote]                    = useState('');
-  const [rejectionReasonType, setRejectionReasonType] = useState('predefined'); // 'predefined' or 'custom'
+  const [rejectionReasonType, setRejectionReasonType] = useState('predefined');
   const [selectedPredefinedReason, setSelectedPredefinedReason] = useState('');
   const [customRejectionReason, setCustomRejectionReason] = useState('');
   const [selectedAttendeeForReject, setSelectedAttendeeForReject] = useState(null);
@@ -195,11 +198,13 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
   const [rejectionNoteTitle, setRejectionNoteTitle] = useState('Rejection Reason');
   const [showRefundModal, setShowRefundModal]   = useState(false);
   const [selectedRefundRequest, setSelectedRefundRequest] = useState(null);
-  const [refundAction, setRefundAction]         = useState(null); // 'approve' or 'reject'
+  const [refundAction, setRefundAction]         = useState(null);
   const [processingRefund, setProcessingRefund] = useState(false);
   const [refundProofFile, setRefundProofFile]   = useState(null);
   const [refundError, setRefundError]           = useState(null);
   const [rejectionReason, setRejectionReason]   = useState('');
+  const [editingSeat, setEditingSeat]           = useState(null);
+  const [savingSeat, setSavingSeat]             = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -219,6 +224,7 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
   useEffect(() => {
     function handleClickOutside(evt) {
       if (menuRef.current && !menuRef.current.contains(evt.target)) setMenuOpen(false);
+      setOpenDropdownId(null);
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -266,8 +272,15 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
 
   const handleExportAttendees = () => {
     setMenuOpen(false);
-    const headers = ['Name', 'Email', 'Seat Number', 'Registered Date', 'Payment Status'];
-    const rows = attendees.map(a => [a.name, a.email, a.seatNumber, formatDate(a.registeredAt), a.paymentStatus || 'Pending']);
+    const headers = ['Name', 'Email', 'Seat Number', 'Registered Date', 'Attendance Status', 'Payment Status'];
+    const rows = filteredAttendees.map(a => [
+      a.name,
+      a.email,
+      a.seatNumber,
+      formatDate(a.registeredAt),
+      a.attendeeStatus === 'attended' ? 'Attended' : a.attendeeStatus === 'no_show' ? 'No Show' : 'Unmarked',
+      a.paymentStatus || 'Pending',
+    ]);
     const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -342,6 +355,29 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
     'Guest did not meet HangOut requirements',
     'HangOut policy violation',
   ];
+
+  const handleAttendanceStatusChange = async (attendee, newStatus) => {
+    if (!attendee) return;
+    const rsvpId = attendee.id || attendee.rsvpId || attendee.rsvp?.id;
+    if (!rsvpId) {
+      setError('Unable to determine attendee RSVP ID');
+      return;
+    }
+
+    setError('');
+    setSavingAttendanceId(rsvpId);
+    try {
+      await updateAttendanceStatus(event.id, rsvpId, newStatus);
+      setAttendees(prev => prev.map(a =>
+        (a.id === rsvpId || a.rsvpId === rsvpId) ? { ...a, attendeeStatus: newStatus === 'unmarked' ? null : newStatus } : a
+      ));
+    } catch (err) {
+      setError('Failed to update attendance status');
+      console.error(err);
+    } finally {
+      setSavingAttendanceId(null);
+    }
+  };
 
   const confirmRejectAttendee = async () => {
     let finalReason = '';
@@ -461,6 +497,14 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
   };
 
   const isEventCompleted = () => event?.eventStatus === 'completed' || hasEventPassed();
+
+  const filteredAttendees = attendees.filter((attendee) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return [attendee.name, attendee.email, attendee.seatNumber]
+      .filter(Boolean)
+      .some(value => value.toLowerCase().includes(q));
+  });
 
   const stats = {
     totalAttendees: attendees.filter(a => a.attendeeStatus !== 'rejected' && a.status !== 'cancelled').length,
@@ -890,19 +934,45 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
                         <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 14 }}>Attendees will appear here once they register</p>
                       </div>
                     ) : (
-                      <div style={{ borderRadius: 14, background: '#13131f', border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 28px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                          <p style={{ color: '#f0eeff', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 16, margin: 0 }}>Attendee List ({attendees.length})</p>
-                          <button onClick={handleExportAttendees} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: '#d1d5db', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-                            <Download size={15} /> Export List
-                          </button>
+                      <div style={{ borderRadius: 14, background: '#13131f', border: '1px solid rgba(255,255,255,0.07)', overflow: 'visible', position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '24px 28px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                          <div>
+                            <p style={{ color: '#f0eeff', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 16, margin: 0 }}>Attendee List ({filteredAttendees.length})</p>
+                            <p style={{ color: '#9ca3af', fontFamily: 'DM Sans, sans-serif', fontSize: 13, margin: '6px 0 0' }}>{attendees.length} total attendees • Search by name, email or seat</p>
+                          </div>
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder="Search attendees by name, email or seat"
+                              style={{
+                                minWidth: 240,
+                                padding: '10px 14px',
+                                borderRadius: 12,
+                                border: '1px solid rgba(255,255,255,0.12)',
+                                background: 'rgba(255,255,255,0.05)',
+                                color: 'white',
+                                fontFamily: 'DM Sans, sans-serif',
+                                fontSize: 13,
+                                outline: 'none'
+                              }}
+                            />
+                            <button onClick={handleExportAttendees} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: '#d1d5db', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                              <Download size={15} /> Export List
+                            </button>
+                          </div>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 100px 140px 140px 160px 120px', columnGap: '20px', padding: '18px 28px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
-                          {['Attendee', 'Email', 'Seat', 'Registered', 'Status', 'Action', ''].map(h => (
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 100px 140px 140px 140px 160px 120px', columnGap: '20px', padding: '18px 28px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
+                          {['Attendee', 'Email', 'Seat', 'Registered', 'Attendance', 'Status', 'Action', ''].map(h => (
                             <span key={h || 'refund-col'} style={{ color: '#9ca3af', fontSize: 13, fontFamily: 'DM Sans, sans-serif', fontWeight: 600 }}>{h}</span>
                           ))}
                         </div>
-                        {attendees.map((a, i) => {
+                        {filteredAttendees.length === 0 ? (
+                          <div style={{ padding: '40px 28px', color: '#9ca3af', fontFamily: 'DM Sans, sans-serif', fontSize: 14 }}>
+                            No attendees found for "{searchQuery}".
+                          </div>
+                        ) : filteredAttendees.map((a, i) => {
                           const statusInfo = a.attendeeStatus === 'rejected' || a.paymentStatus === 'rejected' 
                             ? { label: 'Rejected', color: '#fca5a5', bg: 'rgba(239,68,68,0.2)' }
                             : a.status === 'cancelled' 
@@ -916,7 +986,7 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
                             : { label: 'Pending', color: '#d8b4fe', bg: 'rgba(168,85,247,0.2)' };
                           
                           return (
-                            <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 100px 140px 140px 160px 120px', columnGap: '20px', padding: '22px 28px', alignItems: 'center', borderBottom: i !== attendees.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}
+                            <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 100px 140px 140px 140px 160px 120px', columnGap: '20px', padding: '22px 28px', alignItems: 'center', borderBottom: i !== filteredAttendees.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}
                               onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                             >
@@ -929,12 +999,201 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
                               {/* Email */}
                               <span style={{ color: '#9ca3af', fontFamily: 'DM Sans, sans-serif', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.email}</span>
                               
-                              {/* Seat */}
-                              <span style={{ color: 'white', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 14, textAlign: 'center' }}>{a.seatNumber || '—'}</span>
+                              {/* Seat - Editable */}
+                              {editingSeat?.attendeeId === a.id ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <input
+                                    type="text"
+                                    value={editingSeat.seatNumber}
+                                    onChange={(e) => setEditingSeat({ ...editingSeat, seatNumber: e.target.value })}
+                                    placeholder="e.g., A1"
+                                    style={{
+                                      width: '80px', padding: '6px 8px', borderRadius: 6,
+                                      border: '1px solid rgba(168,85,247,0.5)', background: 'rgba(168,85,247,0.1)',
+                                      color: 'white', fontFamily: 'Syne, sans-serif', fontWeight: 700,
+                                      fontSize: 13, textAlign: 'center'
+                                    }}
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={async () => {
+                                      if (!editingSeat.seatNumber.trim()) {
+                                        alert('Seat number cannot be empty');
+                                        return;
+                                      }
+                                      setSavingSeat(true);
+                                      try {
+                                        await assignSeat(event.id, a.id, editingSeat.seatNumber.trim());
+                                        setAttendees(prev => prev.map(att => 
+                                          att.id === a.id ? { ...att, seatNumber: editingSeat.seatNumber.trim() } : att
+                                        ));
+                                        setEditingSeat(null);
+                                      } catch (err) {
+                                        alert(`Failed to save seat: ${err.message}`);
+                                      } finally {
+                                        setSavingSeat(false);
+                                      }
+                                    }}
+                                    disabled={savingSeat}
+                                    style={{
+                                      width: 28, height: 28, borderRadius: 6, cursor: savingSeat ? 'not-allowed' : 'pointer',
+                                      border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.1)',
+                                      color: '#86efac', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      opacity: savingSeat ? 0.5 : 1
+                                    }}
+                                    title="Save seat"
+                                  >
+                                    <Check size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingSeat(null)}
+                                    disabled={savingSeat}
+                                    style={{
+                                      width: 28, height: 28, borderRadius: 6, cursor: savingSeat ? 'not-allowed' : 'pointer',
+                                      border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)',
+                                      color: '#fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      opacity: savingSeat ? 0.5 : 1
+                                    }}
+                                    title="Cancel"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div
+                                  onClick={() => setEditingSeat({ attendeeId: a.id, seatNumber: a.seatNumber || '' })}
+                                  style={{
+                                    cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    transition: 'all 0.2s',
+                                    color: 'white', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 14,
+                                    background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(168,85,247,0.15)';
+                                    e.currentTarget.style.borderColor = 'rgba(168,85,247,0.4)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'rgba(168,85,247,0.08)';
+                                    e.currentTarget.style.borderColor = 'rgba(168,85,247,0.2)';
+                                  }}
+                                >
+                                  {a.seatNumber || '—'}
+                                </div>
+                              )}
                               
                               {/* Registered Date */}
                               <span style={{ color: '#9ca3af', fontFamily: 'DM Sans, sans-serif', fontSize: 13 }}>{formatDate(a.registeredAt)}</span>
-                              
+
+                              {/* Attendance Status */}
+                              <div>
+                                {a.status === 'cancelled' || a.attendeeStatus === 'rejected' || a.paymentStatus === 'rejected' ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px 12px', borderRadius: 9999, fontSize: 12, fontFamily: 'DM Sans, sans-serif', fontWeight: 600, background: 'rgba(107,114,128,0.15)', color: '#9ca3af', width: 'fit-content' }}>
+                                    {a.attendeeStatus === 'rejected' ? 'Rejected' : a.status === 'cancelled' ? 'Cancelled' : 'Unavailable'}
+                                  </span>
+                                ) : (
+                                  <div style={{ position: 'relative', width: '100%' }}>
+                                    <button
+                                      type="button"
+                                      disabled={savingAttendanceId === a.id}
+                                      onClick={() => setOpenDropdownId(openDropdownId === a.id ? null : a.id)}
+                                      style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: 10,
+                                        border: '1px solid rgba(139,92,246,0.35)',
+                                        background: 'rgba(139,92,246,0.08)',
+                                        color: 'white',
+                                        fontFamily: 'DM Sans, sans-serif',
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                        cursor: savingAttendanceId === a.id ? 'not-allowed' : 'pointer',
+                                        opacity: savingAttendanceId === a.id ? 0.65 : 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        transition: 'all 0.15s ease',
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (savingAttendanceId !== a.id) {
+                                          e.currentTarget.style.background = 'rgba(139,92,246,0.14)';
+                                          e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)';
+                                          e.currentTarget.style.boxShadow = '0 0 12px rgba(139,92,246,0.2)';
+                                        }
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        if (savingAttendanceId !== a.id) {
+                                          e.currentTarget.style.background = 'rgba(139,92,246,0.08)';
+                                          e.currentTarget.style.borderColor = 'rgba(139,92,246,0.35)';
+                                          e.currentTarget.style.boxShadow = 'none';
+                                        }
+                                      }}
+                                    >
+                                      <span>{a.attendeeStatus === 'attended' ? '✓ Attended' : a.attendeeStatus === 'no_show' ? '✕ No Show' : 'Unmarked'}</span>
+                                      <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>▼</span>
+                                    </button>
+                                    {openDropdownId === a.id && (
+                                      <div
+                                        style={{
+                                          position: 'absolute',
+                                          top: '100%',
+                                          left: 0,
+                                          right: 0,
+                                          marginTop: 4,
+                                          borderRadius: 10,
+                                          border: '1px solid rgba(139,92,246,0.5)',
+                                          background: 'rgba(20,20,35,0.95)',
+                                          backdropFilter: 'blur(12px)',
+                                          boxShadow: '0 8px 32px rgba(139,92,246,0.2)',
+                                          zIndex: 1000,
+                                          overflow: 'hidden',
+                                        }}
+                                      >
+                                        {[
+                                          { value: 'unmarked', label: 'Unmarked', color: '#d1d5db' },
+                                          { value: 'attended', label: '✓ Attended', color: '#22c55e' },
+                                          { value: 'no_show', label: '✕ No Show', color: '#f97316' },
+                                        ].map((option, idx) => (
+                                          <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => {
+                                              handleAttendanceStatusChange(a, option.value);
+                                              setOpenDropdownId(null);
+                                            }}
+                                            style={{
+                                              display: 'block',
+                                              width: '100%',
+                                              padding: '12px 14px',
+                                              border: 'none',
+                                              background: a.attendeeStatus === option.value || (option.value === 'unmarked' && !a.attendeeStatus) ? 'rgba(139,92,246,0.25)' : 'transparent',
+                                              color: option.color,
+                                              fontFamily: 'DM Sans, sans-serif',
+                                              fontSize: 13,
+                                              fontWeight: 600,
+                                              cursor: 'pointer',
+                                              textAlign: 'left',
+                                              transition: 'all 0.1s ease',
+                                              borderBottom: idx < 2 ? '1px solid rgba(139,92,246,0.15)' : 'none',
+                                            }}
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.style.background = 'rgba(139,92,246,0.15)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              if (a.attendeeStatus !== option.value && !(option.value === 'unmarked' && !a.attendeeStatus)) {
+                                                e.currentTarget.style.background = 'transparent';
+                                              }
+                                            }}
+                                          >
+                                            {option.label}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
                               {/* Status */}
                               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '4px 12px', borderRadius: 9999, fontSize: 12, fontFamily: 'DM Sans, sans-serif', fontWeight: 600, background: statusInfo.bg, color: statusInfo.color, width: 'fit-content' }}>
                                 {statusInfo.label}

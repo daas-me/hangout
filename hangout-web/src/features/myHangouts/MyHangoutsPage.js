@@ -8,12 +8,21 @@ import {
 } from 'lucide-react';
 import { getHostingEvents, deleteEvent, getAttendingEvents } from '../home/homeApi';
 import { publishEvent } from '../events/eventsApi';
+import { getUserFavorites, removeFavorite, clearFavoriteCache } from '../events/favoriteApi';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
 import { STATUS_CONFIG } from '../../shared/config/statusConfig';
 import HostEventDashboard from '../events/HostEventDashboard';
 import AttendingEventDashboard from '../events/AttendingEventDashboard';
 import AttendingCard from './AttendingCard';
 import s from '../../styles/MyHangOutsPage.module.css';
+
+// Formats "YYYY-MM-DD" → "May 06, 2026"
+const formatCardDate = (dateStr) => {
+  if (!dateStr) return 'Date TBD';
+  const date = new Date(dateStr + 'T00:00:00');
+  if (isNaN(date)) return dateStr;
+  return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+};
 
 export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvents = [], onEditEvent, onViewEvent }) {
   const [tab,             setTab]             = useState('hosting');
@@ -22,6 +31,7 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
   const [attendingFilter, setAttendingFilter] = useState('confirmed');
   const [apiHosting,      setApiHosting]      = useState([]);
   const [apiAttending,    setApiAttending]    = useState([]);
+  const [apiFavorites,    setApiFavorites]    = useState([]);
   const [loading,         setLoading]         = useState(true);
   const [managingEvent,   setManagingEvent]   = useState(null);
   const [viewingAttendingEvent, setViewingAttendingEvent] = useState(null);
@@ -46,11 +56,20 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
     }
   };
 
+  const fetchFavoriteEvents = async (refresh = false) => {
+    try {
+      const data = await getUserFavorites(refresh);
+      setApiFavorites(data);
+    } catch (err) {
+      console.error('Failed to fetch favorite events:', err);
+      setApiFavorites([]);
+    }
+  };
+
   const fetchAllEvents = useCallback(async () => {
     setLoading(true);
     try {
-      // Use cache on initial load (refresh=false), only force refresh on manual actions
-      await Promise.all([fetchHostingEvents(), fetchAttendingEvents()]);
+      await Promise.all([fetchHostingEvents(), fetchAttendingEvents(), fetchFavoriteEvents()]);
     } finally {
       setLoading(false);
     }
@@ -60,8 +79,6 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
     fetchAllEvents();
   }, [fetchAllEvents]);
 
-  // Auto-refresh every 30 seconds with cache (NOT forcing refresh)
-  // Only refresh if data is stale, don't spam the backend
   useEffect(() => {
     let refreshInterval;
     let failureCount = 0;
@@ -71,7 +88,6 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
       Promise.all([
         (async () => {
           try {
-            // Don't force refresh - use cache if available
             const data = await getHostingEvents(false);
             setApiHosting(data);
           } catch (err) {
@@ -81,7 +97,6 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
         })(),
         (async () => {
           try {
-            // Don't force refresh - use cache if available
             const data = await getAttendingEvents(false);
             setApiAttending(data);
           } catch (err) {
@@ -89,13 +104,21 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
             throw err;
           }
         })(),
+        (async () => {
+          try {
+            const data = await getUserFavorites(false);
+            setApiFavorites(data);
+          } catch (err) {
+            console.warn('[MyHangoutsPage] Failed to refresh favorites:', err);
+            throw err;
+          }
+        })(),
       ])
         .then(() => {
-          failureCount = 0; // Reset on success
+          failureCount = 0;
         })
         .catch(err => {
           failureCount++;
-          // Stop immediately on auth errors
           if (err.message?.includes('401') || err.message?.includes('Authentication')) {
             console.warn('[MyHangoutsPage] Auth error - stopping auto-refresh');
             clearInterval(refreshInterval);
@@ -108,7 +131,6 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
         });
     };
 
-    // Start refresh after 30 seconds, then every 30 seconds
     refreshInterval = setInterval(performRefresh, 30000);
     return () => clearInterval(refreshInterval);
   }, []);
@@ -200,7 +222,7 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
   const tabs = [
     { key: 'hosting',   label: `Hosting (${allHosting.length})`    },
     { key: 'attending', label: `Attending (${apiAttending.length})` },
-    { key: 'favorites', label: `Favorites (0)`                      },
+    { key: 'favorites', label: `Favorites (${apiFavorites.length})` },
   ];
 
   const q = search.toLowerCase();
@@ -210,7 +232,8 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
   const filteredAttending = apiAttending
     .filter(e => e.title?.toLowerCase().includes(q) || e.location?.toLowerCase().includes(q))
     .filter(filterAttendingEvent);
-  const filteredFavorites = [];
+  const filteredFavorites = apiFavorites
+    .filter(e => e.title?.toLowerCase().includes(q) || e.location?.toLowerCase().includes(q));
 
   if (managingEvent) {
     return (
@@ -229,7 +252,7 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
         event={viewingAttendingEvent}
         onBack={() => {
           setViewingAttendingEvent(null);
-          fetchAttendingEvents(); // Refresh in case of status changes
+          fetchAttendingEvents();
         }}
         currentUser={user}
       />
@@ -326,6 +349,7 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
                 <AttendingCard 
                   key={event.id} 
                   event={event}
+                  currentUser={user} 
                   onViewDetails={() => setViewingAttendingEvent(event)}
                   onOpenEvent={() => onViewEvent(event)}
                   onEventCancelled={() => fetchAttendingEvents()}
@@ -337,10 +361,28 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
 
         {tab === 'favorites' && (
           <div className={s.list}>
-            {filteredFavorites.length === 0
-              ? <EmptyState tab="favorites" onNavigate={onNavigate} />
-              : filteredFavorites.map(event => <FavoriteCard key={event.id} event={event} />)
-            }
+            {loading ? (
+              <><CardSkeleton /><CardSkeleton /></>
+            ) : filteredFavorites.length === 0 ? (
+              <EmptyState tab="favorites" onNavigate={onNavigate} />
+            ) : (
+              filteredFavorites.map(event => (
+                <FavoriteCard 
+                  key={event.id} 
+                  event={event}
+                  onViewEvent={onViewEvent}
+                  onRemoveStart={(removedId) => {
+                    // Instantly remove from local state for optimistic UI
+                    setApiFavorites(prev => prev.filter(e => e.id !== removedId));
+                  }}
+                  onRemoveComplete={() => {
+                    // After removal completes on server, refresh the list
+                    clearFavoriteCache();
+                    fetchFavoriteEvents(true);
+                  }}
+                />
+              ))
+            )}
           </div>
         )}
       </main>
@@ -490,11 +532,11 @@ function HostingCard({ event, onDelete, onEdit, onView, onOpenEvent, onPublish, 
           </div>
         </div>
         <div className={s.infoGrid}>
-          <InfoItem icon={Calendar}       label="Date" value={event.date} />
-          <InfoItem icon={Clock}          label="Time" value={getTimeLabel(event)} />
-          <InfoItem icon={MapPin}         label="Location"    value={event.location?.length > 30 ? event.location.substring(0, 30) + '…' : event.location} />
-          <InfoItem icon={Users}          label="Attendees"   value={`${attendeeCurrent}/${attendeeMax}`} />
-          <InfoItem icon={PhilippinePeso} label="Price"       value={event.price === 0 ? 'FREE' : `₱${event.price}`} accent />
+          <InfoItem icon={Calendar}       label="Date"       value={formatCardDate(event.date)} />
+          <InfoItem icon={Clock}          label="Time"       value={getTimeLabel(event)} />
+          <InfoItem icon={MapPin}         label="Location"   value={event.location?.length > 30 ? event.location.substring(0, 30) + '…' : event.location} />
+          <InfoItem icon={Users}          label="Attendees"  value={`${attendeeCurrent}/${attendeeMax}`} />
+          <InfoItem icon={PhilippinePeso} label="Price"      value={event.price === 0 ? 'FREE' : `₱${event.price}`} accent />
         </div>
         <div className={s.actions}>
           {isDraft ? (
@@ -550,7 +592,37 @@ function HostingCard({ event, onDelete, onEdit, onView, onOpenEvent, onPublish, 
   );
 }
 
-function FavoriteCard({ event }) {
+function FavoriteCard({ event, onViewEvent, onRemoveStart, onRemoveComplete }) {
+  const [removing, setRemoving] = useState(false);
+
+  const handleRemoveFavorite = async () => {
+    // Optimistically remove from UI immediately
+    onRemoveStart?.(event.id);
+    setRemoving(true);
+    try {
+      await removeFavorite(event.id);
+      // Only refresh after removal completes
+      onRemoveComplete?.();
+    } catch (err) {
+      console.error('Failed to remove favorite:', err);
+      setRemoving(false);
+    }
+  };
+
+  // Support both response shapes: flat { attendeeCount } and nested { attendees: { current } }
+  const attendeeCurrent = event.attendees?.current ?? event.attendeeCount ?? 0;
+  const attendeeMax     = event.attendees?.max ?? event.capacity ?? 100;
+
+  // Debug: log the event data to see what we're receiving
+  console.log('[FavoriteCard] Event data:', { 
+    id: event.id, 
+    title: event.title, 
+    attendeeCount: event.attendeeCount,
+    capacity: event.capacity,
+    attendeeCurrent,
+    attendeeMax
+  });
+
   return (
     <div className={s.card}>
       <div className={s.imgWrap}>
@@ -563,15 +635,14 @@ function FavoriteCard({ event }) {
       <div className={s.details}>
         <h3 className={s.cardTitle}>{event.title}</h3>
         <div className={s.infoGrid}>
-          <InfoItem icon={Calendar}       label="Date & Time" value={`${event.date} • ${getTimeLabel(event)}`} />
+          <InfoItem icon={Calendar}       label="Date & Time" value={`${formatCardDate(event.date)} • ${getTimeLabel(event)}`} />
           <InfoItem icon={MapPin}         label="Location"    value={event.location} />
-          <InfoItem icon={Users}          label="Attendees"   value={event.attendees} />
+          <InfoItem icon={Users}          label="Attendees"   value={`${attendeeCurrent}/${attendeeMax}`} />
           <InfoItem icon={PhilippinePeso} label="Price"       value={event.price === 0 ? 'FREE' : `₱${event.price}`} accent />
         </div>
         <div className={s.actions}>
-          <button className={s.btnEdit}><Eye size={18} /> View Details</button>
-          <button className={s.btnFav}><Heart size={18} style={{ fill: '#ec4899', color: '#ec4899' }} /> Remove</button>
-          <button className={s.btnManage}>RSVP Now</button>
+          <button className={s.btnEdit} onClick={() => onViewEvent?.(event)}><Eye size={18} /> View Details</button>
+          <button className={s.btnFav} onClick={handleRemoveFavorite} disabled={removing}><Heart size={18} style={{ fill: '#ec4899', color: '#ec4899' }} /> {removing ? 'Removing…' : 'Remove'}</button>
         </div>
       </div>
     </div>

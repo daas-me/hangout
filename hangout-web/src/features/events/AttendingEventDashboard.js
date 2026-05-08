@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import s from '../../styles/HostEventDashboard.module.css';
 import { NotificationModal } from '../../shared/components/NotificationModal';
+import { ETicket } from '../../shared/components/ETicket';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
 import { API_BASE, getAuthHeaders } from '../../shared/api/apiClient';
 import { cancelRSVP, checkRSVPStatus, acknowledgeRefund } from '../events/eventsApi';
@@ -22,6 +23,7 @@ export default function AttendingEventDashboard({ event, onBack, currentUser }) 
   const [refundRejectionReason, setRefundRejectionReason] = useState('');
   const [notification, setNotification] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [showETicket, setShowETicket] = useState(false);
 
   /* ── Derive state ───────────────────────────────────────────────────────── */
   const isPaidEvent   = event.price != null && event.price > 0;
@@ -171,24 +173,7 @@ export default function AttendingEventDashboard({ event, onBack, currentUser }) 
   };
 
   const handleDownloadTicket = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 400; canvas.height = 600;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 400, 600);
-    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 24px Arial';
-    ctx.fillText(event.title, 20, 50);
-    ctx.font = '14px Arial';
-    ctx.fillText(`Ticket #: ${event.ticketNumber || 'N/A'}`, 20, 100);
-    ctx.fillText(`Seat: ${event.seatNumber || 'N/A'}`, 20, 130);
-    ctx.fillText(`Date: ${event.date}`, 20, 160);
-    ctx.fillText(`Time: ${getTimeLabel(event)}`, 20, 190);
-    ctx.fillText(`Location: ${event.location}`, 20, 220);
-    canvas.toBlob(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${event.title}-ticket.png`; a.click();
-      window.URL.revokeObjectURL(url);
-    });
+    setShowETicket(true);
   };
 
  const handleCancelRSVP = async () => {
@@ -826,6 +811,23 @@ export default function AttendingEventDashboard({ event, onBack, currentUser }) 
             style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12 }}
           />
         </div>
+      )}
+
+     {showETicket && (
+        <ETicket
+          event={event}
+          rsvp={{ 
+            ticketNumber: event.ticketNumber || `TKT-${event.rsvpId || event.id}`, 
+            seatNumber: event.seatNumber,
+            id: event.rsvpId || event.id 
+          }}
+          guestName={
+            currentUser?.firstname && currentUser?.lastname 
+              ? `${currentUser.firstname} ${currentUser.lastname}` 
+              : 'Guest'
+          }
+          onClose={() => setShowETicket(false)}
+        />
       )}
     </div>
   );

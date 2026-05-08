@@ -328,6 +328,62 @@ export async function rejectAttendee(eventId, rsvpId, rejectionReason) {
   return data;
 }
 
+export async function updateAttendanceStatus(eventId, rsvpId, attendanceStatus) {
+  const headers = getAuthHeaders();
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/${rsvpId}/attendance-status`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ attendanceStatus }),
+  });
+
+  if (!res.ok) {
+    let errorMsg = 'Failed to update attendance status';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      if (res.status === 403) errorMsg = 'You do not have permission to update attendance status for this event';
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+    }
+    throw new Error(`${errorMsg} (${res.status})`);
+  }
+
+  const data = await res.json();
+  return data;
+}
+
+export async function assignSeat(eventId, rsvpId, seatNumber) {
+  const headers = getAuthHeaders();
+  console.log(`[assignSeat] Assigning seat "${seatNumber}" for event ${eventId}, RSVP ${rsvpId}`, {
+    Authorization: headers.Authorization ? 'Bearer [token]' : 'NO_TOKEN',
+  });
+  
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/${rsvpId}/assign-seat`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ seatNumber }),
+  });
+  if (!res.ok) {
+    let errorMsg = 'Failed to assign seat';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      if (res.status === 403) errorMsg = 'You do not have permission to assign seats for this event';
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+    }
+    throw new Error(`${errorMsg} (${res.status})`);
+  }
+  const data = await res.json();
+  return data;
+}
+
 export async function removeAttendeeFromHistory(eventId, rsvpId) {
   const headers = getAuthHeaders();
   console.log(`[removeAttendeeFromHistory] Removing attendee for event ${eventId}, RSVP ${rsvpId}`, {
