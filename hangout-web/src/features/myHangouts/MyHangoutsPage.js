@@ -24,7 +24,7 @@ const formatCardDate = (dateStr) => {
   return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 };
 
-export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvents = [], onEditEvent, onViewEvent }) {
+export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvents = [], onEditEvent, onViewEvent, onMessageUser }) {
   const [tab,             setTab]             = useState('hosting');
   const [search,          setSearch]          = useState('');
   const [hostingFilter,   setHostingFilter]   = useState('published');
@@ -242,6 +242,7 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
         onBack={() => setManagingEvent(null)}
         onEditEvent={onEditEvent}
         currentUser={user}
+        onMessageUser={onMessageUser}
       />
     );
   }

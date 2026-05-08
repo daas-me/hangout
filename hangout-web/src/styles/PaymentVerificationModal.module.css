@@ -78,6 +78,23 @@
   gap: 24px;
 }
 
+.body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.body::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 999px;
+}
+
+.body::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
 /* Event Info Card */
 .eventCard {
   background: rgba(168, 85, 247, 0.08);

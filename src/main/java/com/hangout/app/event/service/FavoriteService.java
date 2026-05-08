@@ -1,7 +1,7 @@
 package com.hangout.app.event.service;
 
-import com.hangout.app.event.model.EventEntity;
-import com.hangout.app.event.model.FavoriteEntity;
+import com.hangout.app.event.entity.EventEntity;
+import com.hangout.app.event.entity.FavoriteEntity;
 import com.hangout.app.event.repository.EventRepository;
 import com.hangout.app.event.repository.FavoriteRepository;
 import com.hangout.app.event.repository.RSVPRepository;
@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service

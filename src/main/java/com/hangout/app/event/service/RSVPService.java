@@ -1,9 +1,10 @@
 package com.hangout.app.event.service;
 
-import com.hangout.app.event.model.EventEntity;
-import com.hangout.app.event.model.RSVPEntity;
+import com.hangout.app.event.entity.EventEntity;
+import com.hangout.app.event.entity.RSVPEntity;
 import com.hangout.app.event.repository.EventRepository;
 import com.hangout.app.event.repository.RSVPRepository;
+import com.hangout.app.notification.service.NotificationService;
 import com.hangout.app.user.entity.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,7 @@ public class RSVPService {
     @Autowired private RSVPRepository rsvpRepository;
     @Autowired private EventRepository eventRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private NotificationService notificationService;
 
     // ── Helper Methods ─────────────────────────────────────────────────────────
 
@@ -56,12 +58,16 @@ public class RSVPService {
         EventEntity event = findEventOrThrow(eventId);
 
         var existingRsvp = rsvpRepository.findByEventAndUser(event, user);
-        RSVPEntity rsvp = existingRsvp.orElseGet(() -> new RSVPEntity());
+        boolean isNew = existingRsvp.isEmpty();
+        RSVPEntity rsvp = existingRsvp.orElseGet(RSVPEntity::new);
+
+        System.out.println("[RSVPService] Creating/Updating RSVP: user=" + user.getEmail() + 
+            ", event=" + event.getTitle() + 
+            ", isNew=" + isNew);
 
         rsvp.setEvent(event);
         rsvp.setUser(user);
 
-        // Hard-reset ALL transaction state on every new RSVP
         rsvp.setIsRemovedByAttendee(false);
         rsvp.setIsRemovedByHost(false);
         rsvp.setAttendeeStatus(null);
@@ -92,6 +98,25 @@ public class RSVPService {
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
         updateEventAttendeeCount(event);
+
+        // Notify host of new RSVP
+        if (isNew) {
+            String guestName = user.getFirstname() + " " + user.getLastname();
+            String message = guestName + " just RSVPd to \"" + event.getTitle() + "\"";
+            System.out.println("[RSVPService] ✓ Sending NEW_RSVP notification to host: " + event.getHost().getEmail() + 
+                ", message=" + message);
+            notificationService.create(
+                event.getHost(),
+                "NEW_RSVP",
+                "New Registration",
+                message,
+                event.getId(),
+                "event"
+            );
+        } else {
+            System.out.println("[RSVPService] ℹ Updating existing RSVP (not sending new notification)");
+        }
+
         return toRsvpResponse(rsvp);
     }
 
@@ -104,43 +129,71 @@ public class RSVPService {
         RSVPEntity rsvp = rsvpRepository.findByEventAndUser(event, user)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found for this event"));
 
-        // Check if RSVP is already cancelled - return friendly message instead of error
         if ("cancelled".equals(rsvp.getStatus())) {
             Map<String, Object> result = new HashMap<>();
-            result.put("message", "RSVP was already cancelled"); // or "already cancelled"
+            result.put("message", "RSVP was already cancelled");
             result.put("refundStatus", rsvp.getRefundStatus());
             return result;
         }
 
-        // Check if attendee was rejected by host - can't cancel a rejected RSVP
         if ("rejected".equals(rsvp.getAttendeeStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This RSVP was rejected by the host and cannot be cancelled");
         }
 
-        // Store cancellation reason if provided (for paid events requesting refunds)
-        // Accept both "reason" and "message" fields
-        String cancellationReason = (String) body.getOrDefault("reason", 
+        String cancellationReason = (String) body.getOrDefault("reason",
             (String) body.getOrDefault("message", ""));
 
         boolean isPaid = event.getPrice() != null && event.getPrice() > 0;
-        if (isPaid && "confirmed".equals(rsvp.getStatus()) && "confirmed".equals(rsvp.getPaymentStatus())) {
-            // For paid events with confirmed payment, initiate refund request instead of immediate cancellation
+        boolean hasNoRefundPolicy = Boolean.TRUE.equals(event.getNoRefundPolicy());
+        boolean isConfirmedPaid = isPaid && "confirmed".equals(rsvp.getStatus()) && "confirmed".equals(rsvp.getPaymentStatus());
+
+        if (isConfirmedPaid && !hasNoRefundPolicy) {
+            // Refundable — go through normal refund system
             rsvp.setRefundStatus("pending");
             rsvp.setCancellationReason(cancellationReason);
-            // Status remains "confirmed" until refund is processed
+
+            String guestName = user.getFirstname() + " " + user.getLastname();
+            notificationService.create(
+                event.getHost(), "REFUND_REQUEST", "Refund Request",
+                guestName + " requested a refund for \"" + event.getTitle() + "\""
+                    + (cancellationReason != null && !cancellationReason.isBlank() ? ": " + cancellationReason : ""),
+                event.getId(), "event"
+            );
+
+        } else if (isConfirmedPaid && hasNoRefundPolicy) {
+            // Non-refundable — still route through refund tab so host can formally reject
+            rsvp.setRefundStatus("pending");
+            rsvp.setCancellationReason(cancellationReason);
+            rsvp.setAttendeeRejectionType("no_refund_policy");
+
+            String guestName = user.getFirstname() + " " + user.getLastname();
+            notificationService.create(
+                event.getHost(), "REFUND_REQUEST", "Cancellation (Non-Refundable)",
+                guestName + " cancelled their RSVP for \"" + event.getTitle() + "\" — this event has a no-refund policy."
+                    + (cancellationReason != null && !cancellationReason.isBlank() ? " Reason: " + cancellationReason : ""),
+                event.getId(), "event"
+            );
+
         } else {
-            // For free events or unconfirmed paid events, cancel immediately
+            // Free event or unconfirmed paid — cancel directly
             rsvp.setStatus("cancelled");
             rsvp.setCancellationReason(cancellationReason);
-            // Update attendance count (remove from attended count)
             updateEventAttendeeCount(event);
+
+            String guestName = user.getFirstname() + " " + user.getLastname();
+            notificationService.create(
+                event.getHost(), "RSVP_CANCELLED", "RSVP Cancelled",
+                guestName + " cancelled their RSVP for \"" + event.getTitle() + "\""
+                    + (cancellationReason != null && !cancellationReason.isBlank() ? ": " + cancellationReason : ""),
+                event.getId(), "event"
+            );
         }
 
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
 
         Map<String, Object> result = new HashMap<>();
-        if (isPaid && "confirmed".equals(rsvp.getStatus()) && "confirmed".equals(rsvp.getPaymentStatus())) {
+        if (isConfirmedPaid) {
             result.put("message", "Refund request submitted. Awaiting host approval.");
             result.put("refundStatus", "pending");
         } else {
@@ -244,33 +297,32 @@ public class RSVPService {
     public Map<String, Object> approvePayment(String email, Long eventId, Long rsvpId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
-
-        if (!event.getHost().getId().equals(user.getId())) {
+        if (!event.getHost().getId().equals(user.getId()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to approve payments");
-        }
-
         RSVPEntity rsvp = rsvpRepository.findById(rsvpId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
-
-        if (!rsvp.getEvent().getId().equals(eventId)) {
+        if (!rsvp.getEvent().getId().equals(eventId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RSVP does not belong to this event");
-        }
 
         rsvp.setPaymentStatus("confirmed");
         rsvp.setStatus("confirmed");
-        
-        // Clear any stale refund data when payment is approved
-        // This ensures each transaction is independent and clean
         rsvp.setRefundStatus(null);
         rsvp.setRefundProofUrl(null);
         rsvp.setRefundAcknowledged(null);
         rsvp.setRefundRejectionReason(null);
-        
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
-
-        // Increment attendance count when payment is approved
         updateEventAttendeeCount(event);
+
+        // Notify guest
+        notificationService.create(
+            rsvp.getUser(),
+            "PAYMENT_APPROVED",
+            "Payment Approved! 🎉",
+            "Your payment for \"" + event.getTitle() + "\" has been approved. Your RSVP is confirmed!",
+            event.getId(),
+            "event"
+        );
 
         return toRsvpResponse(rsvp);
     }
@@ -280,28 +332,30 @@ public class RSVPService {
     public Map<String, Object> rejectPayment(String email, Long eventId, Long rsvpId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
-
-        if (!event.getHost().getId().equals(user.getId())) {
+        if (!event.getHost().getId().equals(user.getId()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to reject payments");
-        }
-
         RSVPEntity rsvp = rsvpRepository.findById(rsvpId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
-
-        if (!rsvp.getEvent().getId().equals(eventId)) {
+        if (!rsvp.getEvent().getId().equals(eventId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RSVP does not belong to this event");
-        }
 
-        // Keep RSVP for data preservation, just mark payment as rejected
         rsvp.setPaymentStatus("rejected");
         rsvp.setAttendeeStatus("rejected");
         rsvp.setAttendeeRejectionType("payment");
         rsvp.setAttendeeRejectionReason("Payment proof was rejected by the host.");
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
-
-        // Update attendance count (remove from confirmed count)
         updateEventAttendeeCount(event);
+
+        // Notify guest
+        notificationService.create(
+            rsvp.getUser(),
+            "PAYMENT_REJECTED",
+            "Payment Rejected",
+            "Your payment proof for \"" + event.getTitle() + "\" was rejected. Please resubmit a valid proof.",
+            event.getId(),
+            "event"
+        );
 
         return toRsvpResponse(rsvp);
     }
@@ -342,34 +396,33 @@ public class RSVPService {
     public Map<String, Object> rejectAttendee(String email, Long eventId, Long rsvpId, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
-
-        if (!event.getHost().getId().equals(user.getId())) {
+        if (!event.getHost().getId().equals(user.getId()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to reject attendees");
-        }
-
         RSVPEntity rsvp = rsvpRepository.findById(rsvpId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
-
-        if (!rsvp.getEvent().getId().equals(eventId)) {
+        if (!rsvp.getEvent().getId().equals(eventId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RSVP does not belong to this event");
-        }
 
-        // Keep RSVP for data preservation, mark as rejected with reason
         String rejectionReason = (String) body.getOrDefault("rejectionReason", "Rejected by host");
-        
-        // Limit character length to 500 for custom reasons
-        if (rejectionReason.length() > 500) {
-            rejectionReason = rejectionReason.substring(0, 500);
-        }
+        if (rejectionReason.length() > 500) rejectionReason = rejectionReason.substring(0, 500);
 
         rsvp.setAttendeeStatus("rejected");
         rsvp.setAttendeeRejectionReason(rejectionReason);
         rsvp.setAttendeeRejectionType("attendee_tab");
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
-        
-        // Update attendance count (remove from confirmed count)
         updateEventAttendeeCount(event);
+
+        // Notify guest
+        notificationService.create(
+            rsvp.getUser(),
+            "RSVP_REJECTED",
+            "RSVP Rejected",
+            "Your RSVP for \"" + event.getTitle() + "\" was rejected by the host."
+                + (rejectionReason.isBlank() ? "" : " Reason: " + rejectionReason),
+            event.getId(),
+            "event"
+        );
 
         return toRsvpResponse(rsvp);
     }
@@ -463,89 +516,95 @@ public class RSVPService {
         return Map.of("message", "Event removed from your attending list");
     }
 
-    // ── Handle Event Cancellation (when host cancels/deletes event) ───────────────
+    // ── Handle Event Cancellation ─────────────────────────────────────────────
 
     public Map<String, Object> handleEventCancellation(Long eventId, String reason) {
         EventEntity event = findEventOrThrow(eventId);
-
-        // Mark all RSVPs with the event's cancellation status and reason
         List<RSVPEntity> rsvps = rsvpRepository.findByEvent(event);
         for (RSVPEntity rsvp : rsvps) {
-            if (!rsvp.getStatus().equals("cancelled")) {
-                // Store the event cancellation reason in RSVP for guest visibility
+            if (!"cancelled".equals(rsvp.getStatus())) {
                 rsvp.setCancellationReason(reason != null ? reason : "Event was cancelled by the host");
                 rsvp.setUpdatedAt(LocalDateTime.now());
                 rsvpRepository.save(rsvp);
+
+                // Notify each attending guest
+                notificationService.create(
+                    rsvp.getUser(),
+                    "EVENT_CANCELLED",
+                    "HangOut Cancelled",
+                    "The HangOut \"" + event.getTitle() + "\" has been cancelled."
+                        + (reason != null && !reason.isBlank() ? " Reason: " + reason : ""),
+                    event.getId(),
+                    "event"
+                );
             }
         }
-
-        return Map.of(
-            "message", "Event cancellation notified to all attendees",
-            "affectedRsvps", rsvps.size()
-        );
+        return Map.of("message", "Event cancellation notified to all attendees", "affectedRsvps", rsvps.size());
     }
 
-    // ── Request Refund ───────────────────────────────────────────────────────
+    // ── Request Refund ─────────────────────────────────────────────────────────
 
     public Map<String, Object> requestRefund(String email, Long eventId, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
-
         RSVPEntity rsvp = rsvpRepository.findByEventAndUser(event, user)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
-
-        // Check if event is paid
-        if (!"paid".equals(event.getEventType())) {
+        if (!"paid".equals(event.getEventType()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Refunds are only available for paid events");
-        }
-
-        // Check if RSVP is confirmed (payment approved)
-        if (!"confirmed".equals(rsvp.getStatus()) || !"confirmed".equals(rsvp.getPaymentStatus())) {
+        if (!"confirmed".equals(rsvp.getStatus()) || !"confirmed".equals(rsvp.getPaymentStatus()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only confirmed attendees can request refunds");
-        }
-
-        // Check if refund is already requested or processed
-        if (rsvp.getRefundStatus() != null && !"rejected".equals(rsvp.getRefundStatus())) {
+        if (rsvp.getRefundStatus() != null && !"rejected".equals(rsvp.getRefundStatus()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Refund already requested or processed");
-        }
 
         String refundReason = (String) body.getOrDefault("refundReason", "");
-
-        // Set RSVP status to pending review (not cancelled yet)
         rsvp.setRefundStatus("pending");
-        rsvp.setCancellationReason(refundReason); // Store refund reason in cancellation_reason field
+        rsvp.setCancellationReason(refundReason);
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
+
+        // Notify host
+        String guestName = user.getFirstname() + " " + user.getLastname();
+        notificationService.create(
+            event.getHost(),
+            "REFUND_REQUEST",
+            "Refund Request",
+            guestName + " requested a refund for \"" + event.getTitle() + "\""
+                + (refundReason != null && !refundReason.isBlank() ? ": " + refundReason : ""),
+            event.getId(),
+            "event"
+        );
 
         return toRsvpResponse(rsvp);
     }
 
-    // ── Approve Refund ────────────────────────────────────────────────────────
+    // ── Approve Refund ─────────────────────────────────────────────────────────
 
     public Map<String, Object> approveRefund(String email, Long eventId, Long rsvpId, String refundProofUrl) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
-
-        if (!event.getHost().getId().equals(user.getId())) {
+        if (!event.getHost().getId().equals(user.getId()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to approve refunds");
-        }
-
         RSVPEntity rsvp = rsvpRepository.findById(rsvpId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
-
-        if (!rsvp.getEvent().getId().equals(eventId)) {
+        if (!rsvp.getEvent().getId().equals(eventId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RSVP does not belong to this event");
-        }
-
-        if (!"pending".equals(rsvp.getRefundStatus())) {
+        if (!"pending".equals(rsvp.getRefundStatus()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Refund is not in pending status");
-        }
 
-        // Store refund proof and update status
         rsvp.setRefundProofUrl(refundProofUrl);
         rsvp.setRefundStatus("waiting_acknowledgement");
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
+
+        // Notify guest
+        notificationService.create(
+            rsvp.getUser(),
+            "REFUND_PROCESSED",
+            "Refund Processed — Action Required",
+            "The host has processed your refund for \"" + event.getTitle() + "\". Please confirm receipt in your HangOuts.",
+            event.getId(),
+            "event"
+        );
 
         return toRsvpResponse(rsvp);
     }
@@ -576,49 +635,75 @@ public class RSVPService {
         rsvp.setRefundProofUrl(null);
         rsvp.setRefundAcknowledged(null);
         rsvp.setRefundRejectionReason(rejectionReason);
+        rsvp.setStatus("cancelled");   
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
+        updateEventAttendeeCount(event);
+
+        notificationService.create(
+            rsvp.getUser(),
+            "RSVP_REJECTED",
+            "Refund Rejected",
+            "Your refund request for \"" + event.getTitle() + "\" was rejected by the host."
+                + (rejectionReason != null && !rejectionReason.isBlank() ? " Reason: " + rejectionReason : ""),
+            event.getId(),
+            "event"
+        );
 
         return toRsvpResponse(rsvp);
     }
 
-    // ── Acknowledge Refund ────────────────────────────────────────────────────
+    // ── Acknowledge Refund ─────────────────────────────────────────────────────
 
     public Map<String, Object> acknowledgeRefund(String email, Long eventId, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
-
         RSVPEntity rsvp = rsvpRepository.findByEventAndUser(event, user)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
-
-        if (!"waiting_acknowledgement".equals(rsvp.getRefundStatus())) {
+        if (!"waiting_acknowledgement".equals(rsvp.getRefundStatus()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Refund is not waiting for acknowledgement");
-        }
 
-        String acknowledgement = (String) body.get("acknowledgement"); // "received" or "rejected"
+        String acknowledgement = (String) body.get("acknowledgement");
         String rejectionReason = (String) body.get("rejectionReason");
 
         if ("received".equals(acknowledgement)) {
-            // Guest confirms they received the refund
             rsvp.setRefundAcknowledged("received");
-            rsvp.setStatus("cancelled"); // Now mark as cancelled
+            rsvp.setStatus("cancelled");
             rsvp.setRefundStatus("completed");
+
+            // Notify host that refund was confirmed
+            String guestName = user.getFirstname() + " " + user.getLastname();
+            notificationService.create(
+                event.getHost(),
+                "REFUND_ACKNOWLEDGED",
+                "Refund Confirmed",
+                guestName + " confirmed receipt of the refund for \"" + event.getTitle() + "\".",
+                event.getId(),
+                "event"
+            );
         } else if ("rejected".equals(acknowledgement)) {
-            // Guest rejects the refund proof, provide reason
             rsvp.setRefundAcknowledged("rejected");
             rsvp.setRefundRejectionReason(rejectionReason);
-            rsvp.setRefundStatus("pending"); // Go back to pending for host to re-upload proof
+            rsvp.setRefundStatus("pending");
+
+            // Notify host that guest disputes the refund
+            String guestName = user.getFirstname() + " " + user.getLastname();
+            notificationService.create(
+                event.getHost(),
+                "REFUND_ACKNOWLEDGED",
+                "Refund Disputed",
+                guestName + " says they did not receive the refund for \"" + event.getTitle() + "\""
+                    + (rejectionReason != null && !rejectionReason.isBlank() ? ": " + rejectionReason : "."),
+                event.getId(),
+                "event"
+            );
         } else {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid acknowledgement value");
         }
 
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
-
-        // Update attendee count when refund is completed
-        if ("completed".equals(rsvp.getRefundStatus())) {
-            updateEventAttendeeCount(event);
-        }
+        if ("completed".equals(rsvp.getRefundStatus())) updateEventAttendeeCount(event);
 
         return toRsvpResponse(rsvp);
     }
@@ -628,23 +713,28 @@ public class RSVPService {
     public Map<String, Object> submitPaymentProof(String email, Long eventId, String fileName) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
-
         RSVPEntity rsvp = rsvpRepository.findByEventAndUser(event, user)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found for this event"));
 
-        // Store the filename as the payment proof URL (in production, this would be a cloud URL)
         rsvp.setPaymentProofUrl(fileName);
         rsvp.setPaymentStatus("pending");
-        
-        // Clear any stale refund data when resubmitting payment proof
-        // This ensures payment submission doesn't carry over old refund state
         rsvp.setRefundStatus(null);
         rsvp.setRefundProofUrl(null);
         rsvp.setRefundAcknowledged(null);
         rsvp.setRefundRejectionReason(null);
-        
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
+
+        // Notify host
+        String guestName = user.getFirstname() + " " + user.getLastname();
+        notificationService.create(
+            event.getHost(),
+            "PAYMENT_PROOF",
+            "Payment Proof Submitted",
+            guestName + " submitted payment proof for \"" + event.getTitle() + "\". Please review.",
+            event.getId(),
+            "event"
+        );
 
         return toRsvpResponse(rsvp);
     }
@@ -734,31 +824,35 @@ public class RSVPService {
         return map;
     }
 
-    // ── Assign Seat ───────────────────────────────────────────────────────────
+    // ── Assign Seat ────────────────────────────────────────────────────────────
 
     public Map<String, Object> assignSeat(String email, Long eventId, Long rsvpId, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
-
-        if (!event.getHost().getId().equals(user.getId())) {
+        if (!event.getHost().getId().equals(user.getId()))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to assign seats");
-        }
-
         RSVPEntity rsvp = rsvpRepository.findById(rsvpId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSVP not found"));
-
-        if (!rsvp.getEvent().getId().equals(eventId)) {
+        if (!rsvp.getEvent().getId().equals(eventId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RSVP does not belong to this event");
-        }
 
         String seatNumber = body != null ? (String) body.get("seatNumber") : null;
-        if (seatNumber == null || seatNumber.trim().isEmpty()) {
+        if (seatNumber == null || seatNumber.trim().isEmpty())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Seat number cannot be empty");
-        }
 
         rsvp.setSeatNumber(seatNumber.trim());
         rsvp.setUpdatedAt(LocalDateTime.now());
         rsvpRepository.save(rsvp);
+
+        // Notify guest of seat assignment
+        notificationService.create(
+            rsvp.getUser(),
+            "SEAT_ASSIGNED",
+            "Seat Assigned",
+            "Your seat for \"" + event.getTitle() + "\" has been assigned: " + seatNumber.trim(),
+            event.getId(),
+            "event"
+        );
 
         return toAttendeeResponse(rsvp);
     }
@@ -766,7 +860,10 @@ public class RSVPService {
     private Map<String, Object> toAttendeeResponse(RSVPEntity rsvp) {
         Map<String, Object> map = new HashMap<>();
         map.put("id",            rsvp.getId());
+        map.put("userId",        rsvp.getUser().getId());
         map.put("name",          rsvp.getUser().getFirstname() + " " + rsvp.getUser().getLastname());
+        map.put("firstname",     rsvp.getUser().getFirstname());
+        map.put("lastname",      rsvp.getUser().getLastname());
         map.put("email",         rsvp.getUser().getEmail());
         map.put("photo",         rsvp.getUser().getPhoto() != null ? "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(rsvp.getUser().getPhoto()) : null);
         map.put("photoUrl",      rsvp.getUser().getPhoto() != null ? "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(rsvp.getUser().getPhoto()) : null);

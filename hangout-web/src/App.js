@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from "re
 import "./styles/global.css";
 import { getToken, getTokenExpiry, getUser, isTokenExpired, clearSession, saveUser } from "./shared/utils/storage";
 import { fetchUserProfile, fetchUserPhoto } from "./features/profile/profileApi";
+import ChatWidget from "./features/chat/ChatWidget";
 
 const LoginPage       = lazy(() => import("./features/auth/LoginPage"));
 const RegisterPage    = lazy(() => import("./features/auth/RegisterPage"));
@@ -41,6 +42,7 @@ export default function App() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [eventSourceRoute, setEventSourceRoute] = useState(null);
+  const [openChatWith, setOpenChatWith] = useState(null);
 
   const idleTimer = useRef(null);
   const expiryTimer = useRef(null);
@@ -215,7 +217,7 @@ export default function App() {
     setEventSourceRoute(null);
   }
 
-  function EventDetailRoute({ selectedEvent, onBack, currentUser, onEditEvent }) {
+  function EventDetailRoute({ selectedEvent, onBack, currentUser, onEditEvent, onMessageUser }) {
     const params = useParams();
     const location = useLocation();
     const routeEvent = location.state?.event;
@@ -227,6 +229,7 @@ export default function App() {
         onBack={onBack}
         currentUser={currentUser}
         onEditEvent={onEditEvent}
+        onMessageUser={onMessageUser}
       />
     ) : (
       <Navigate to={ROUTES.home} replace />
@@ -327,6 +330,7 @@ export default function App() {
                 hostedEvents={hostedEvents}
                 onEditEvent={handleEditEvent}
                 onViewEvent={handleViewEvent}
+                onMessageUser={setOpenChatWith}
               />
             </ProtectedRoute>
           }
@@ -364,6 +368,7 @@ export default function App() {
                 onBack={handleBackFromEvent}
                 currentUser={user}
                 onEditEvent={handleEditEvent}
+                onMessageUser={setOpenChatWith}
               />
             </ProtectedRoute>
           }
@@ -373,6 +378,11 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <ChatWidget 
+        currentUser={user} 
+        openChatWith={openChatWith}
+        onChatOpened={() => setOpenChatWith(null)}
+      />
     </Suspense>
   );
 }

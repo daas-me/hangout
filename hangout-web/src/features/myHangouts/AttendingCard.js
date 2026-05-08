@@ -6,9 +6,10 @@ import {
   TicketCheck, RefreshCcw
 } from 'lucide-react';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
-import { cancelRSVP, acknowledgeRefund } from '../events/eventsApi';
+import { cancelRSVP, acknowledgeRefund, checkRSVPStatus } from '../events/eventsApi';
 import { ETicket } from '../../shared/components/ETicket';
 import { STATUS_CONFIG } from '../../shared/config/statusConfig';
+import { NotificationModal } from '../../shared/components/NotificationModal';
 import s from '../../styles/MyHangOutsPage.module.css';
 
 const FRONTEND_BASE = process.env.REACT_APP_FRONTEND_BASE || 'http://localhost:3000';
@@ -361,6 +362,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
   const [showRefundAckModal, setShowRefundAckModal] = useState(false);
   const [refundAcknowledging, setRefundAcknowledging] = useState(false);
   const [refundAckError, setRefundAckError] = useState('');
+  const [notification, setNotification] = useState(null);
 
   /* Derive state ─────────────────────────────────────────────────────────── */
   const isPaidEvent   = event.price != null && event.price > 0;
@@ -415,10 +417,25 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
     setCancelError('');
     setCancelling(true);
     try {
-      await cancelRSVP(event.id, message);
+      await cancelRSVP(event.id, message ? { message: message } : {});
       setShowCancelModal(false);
+      setNotification({ message: 'Your RSVP has been cancelled.', type: 'success' });
       onEventCancelled?.(event.id);
     } catch (err) {
+      // The backend may have succeeded but returned a bad response.
+      // Verify the actual RSVP status before showing an error.
+      try {
+        const status = await checkRSVPStatus(event.id);
+        if (!status?.rsvped) {
+          // Cancellation went through despite the error response
+          setShowCancelModal(false);
+          setNotification({ message: 'Your RSVP has been cancelled.', type: 'success' });
+          onEventCancelled?.(event.id);
+          return;
+        }
+      } catch (_) {
+        // Status check also failed — fall through to show error
+      }
       setCancelError(err.message || 'Failed to cancel RSVP. Please try again.');
     } finally {
       setCancelling(false);
@@ -769,6 +786,16 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
               : 'Guest'
           }
           onClose={() => setShowETicket(false)}
+        />
+      )}
+
+      {notification && (
+        <NotificationModal
+          isOpen={true}
+          message={notification.message}
+          type={notification.type}
+          duration={2000}
+          onClose={() => setNotification(null)}
         />
       )}
     </>

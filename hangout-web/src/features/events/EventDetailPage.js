@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Users, Ticket,
-  Tag, Armchair, CreditCard, Heart, Share2, HelpCircle,
+  Tag, Armchair, CreditCard, Heart, Share2,
   CheckCircle2, ExternalLink, Edit, Trash2, Upload, Eye,
   Lock, X, BarChart3, RefreshCcw, AlertTriangle
 } from 'lucide-react';
@@ -154,7 +154,7 @@ function RefundAckModal({ event, isOpen, onCancel, onConfirm, ackChoice, setAckC
   );
 }
 
-export default function EventDetailPage({ event, onBack, currentUser, onEditEvent }) {
+export default function EventDetailPage({ event, onBack, currentUser, onEditEvent, onMessageUser }) {
   const [liked,       setLiked]       = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [favoriteError, setFavoriteError] = useState(null);
@@ -688,6 +688,7 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
         onBack={() => setShowingManageDashboard(false)}
         onEditEvent={onEditEvent}
         currentUser={currentUser}
+        onMessageUser={onMessageUser}
       />
     );
   }
@@ -871,7 +872,18 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
                 </div>
               </div>
               <p className={s.email}>{hostEmail}</p>
-              <button className={s.msgBtn}>Message Host</button>
+              <button 
+                className={s.msgBtn}
+                onClick={() => onMessageUser?.({
+                  id:        eventHostId,
+                  firstname: hostFirst,
+                  lastname:  hostLast,
+                  email:     hostEmail,
+                  photo:     hostPhoto,
+                })}
+              >
+                Message Host
+              </button>
             </div>
 
             {/* Payment Details */}
@@ -1235,11 +1247,6 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
           onClose={() => setToast(null)}
         />
       )}
-
-      {/* ── Help ── */}
-      <button className={s.helpBtn}>
-        <HelpCircle size={24} />
-      </button>
 
       {/* ── Custom Modals ── */}
       <Modal
