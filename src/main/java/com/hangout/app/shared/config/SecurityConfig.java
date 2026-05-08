@@ -34,7 +34,8 @@ public class SecurityConfig {
             "http://localhost:8000",
             "http://127.0.0.1:3000",
             "http://127.0.0.1:3001",
-            "http://127.0.0.1:8000"
+            "http://127.0.0.1:8000",
+            "https://hangout-web.onrender.com"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
