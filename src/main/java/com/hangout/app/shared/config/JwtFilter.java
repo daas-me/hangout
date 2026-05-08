@@ -90,6 +90,7 @@ public class JwtFilter extends OncePerRequestFilter {
            path.matches("^/api/events/rsvp/uploads/.*") ||
            ("GET".equals(method) && path.matches("^/api/events/[0-9]+$")) ||
            ("GET".equals(method) && path.matches("^/api/events/discover.*")) ||
-           ("GET".equals(method) && path.matches("^/api/events/location/search.*"));
+           ("GET".equals(method) && path.matches("^/api/events/location/search.*")) ||
+           ("GET".equals(method) && path.matches("^/api/events/[0-9]+/rsvp/verify/.*"));
 }
 }

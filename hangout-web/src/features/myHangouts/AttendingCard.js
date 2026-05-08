@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Calendar, Clock, MapPin, Download, Eye, QrCode,
   AlertCircle, Trash2, PhilippinePeso, CheckCircle,
@@ -6,8 +7,19 @@ import {
 } from 'lucide-react';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
 import { cancelRSVP, acknowledgeRefund } from '../events/eventsApi';
+import { ETicket } from '../../shared/components/ETicket';
 import { STATUS_CONFIG } from '../../shared/config/statusConfig';
 import s from '../../styles/MyHangOutsPage.module.css';
+
+const FRONTEND_BASE = process.env.REACT_APP_FRONTEND_BASE || 'http://localhost:3000';
+
+// Formats "YYYY-MM-DD" → "May 06, 2026"
+const formatCardDate = (dateStr) => {
+  if (!dateStr) return 'Date TBD';
+  const date = new Date(dateStr + 'T00:00:00');
+  if (isNaN(date)) return dateStr;
+  return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+};
 
 const parseEventEndDate = (event) => {
   if (!event?.date) return null;
@@ -77,7 +89,6 @@ function RefundAckModal({ event, onCancel, onConfirm, acknowledging, ackError })
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
           <div style={{
             width: 44, height: 44, borderRadius: 10, flexShrink: 0,
@@ -96,7 +107,6 @@ function RefundAckModal({ event, onCancel, onConfirm, acknowledging, ackError })
           </div>
         </div>
 
-        {/* Acknowledgement Options */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -130,7 +140,6 @@ function RefundAckModal({ event, onCancel, onConfirm, acknowledging, ackError })
           </div>
         </div>
 
-        {/* Rejection Reason */}
         {acknowledgement === 'rejected' && (
           <div style={{ marginBottom: 20 }}>
             <label style={{ color: '#e5e7eb', fontFamily: 'DM Sans, sans-serif', fontSize: 14, fontWeight: 600, marginBottom: 8, display: 'block' }}>
@@ -219,7 +228,6 @@ function CancelModal({ event, isPaidEvent, hasNoRefundPolicy, onCancel, onConfir
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
           <div style={{
             width: 44, height: 44, borderRadius: 10, flexShrink: 0,
@@ -238,7 +246,6 @@ function CancelModal({ event, isPaidEvent, hasNoRefundPolicy, onCancel, onConfir
           </div>
         </div>
 
-        {/* Paid event reimbursement notice */}
         {isPaidEvent && !hasNoRefundPolicy && (
           <div style={{
             display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -259,7 +266,6 @@ function CancelModal({ event, isPaidEvent, hasNoRefundPolicy, onCancel, onConfir
           </div>
         )}
 
-        {/* No-refund policy notice */}
         {isPaidEvent && hasNoRefundPolicy && (
           <div style={{
             display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -345,11 +351,10 @@ function CancelModal({ event, isPaidEvent, hasNoRefundPolicy, onCancel, onConfir
   );
 }
 
-/* ─── Refund Acknowledgement Modal ──────────────────────────────────────── */
-
 /* ─── Main component ──────────────────────────────────────────────────────── */
-export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEventCancelled }) {
+export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEventCancelled, currentUser }) {
   const [showTicket,      setShowTicket]      = useState(false);
+  const [showETicket,     setShowETicket]     = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling,      setCancelling]      = useState(false);
   const [cancelError,     setCancelError]     = useState('');
@@ -377,7 +382,6 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
   const rejectionNote  = event.attendeeRejectionReason || event.rejectionNote || event.attendeeRejectionNote || '';
   const refundStatus   = event.refundStatus;
   
-  // Determine status key - prioritize event cancellation state, then refund state, then RSVP state
   let statusKey = 'confirmed';
   if (isEventCancelledOrDeleted) statusKey = eventStatus;
   else if (refundStatus === 'pending' || refundStatus === 'waiting_acknowledgement') statusKey = 'pending_refund';
@@ -386,7 +390,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
   else if (isPending) statusKey = 'pending';
   else if (isCompleted) statusKey = 'completed';
   
-  const truncLoc       = (loc) => loc?.length > 32 ? loc.substring(0, 32) + '…' : loc;
+  const truncLoc = (loc) => loc?.length > 32 ? loc.substring(0, 32) + '…' : loc;
 
   /* Handlers ─────────────────────────────────────────────────────────────── */
   const handleRefundAckConfirm = async (acknowledgement, rejectionReason) => {
@@ -395,32 +399,16 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
     try {
       await acknowledgeRefund(event.id, acknowledgement, rejectionReason);
       setShowRefundAckModal(false);
-      onEventCancelled?.(event.id); // Refresh the list
+      onEventCancelled?.(event.id);
     } catch (err) {
       setRefundAckError(err.message || 'Failed to acknowledge refund. Please try again.');
     } finally {
       setRefundAcknowledging(false);
     }
   };
+
   const handleDownloadTicket = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 400; canvas.height = 600;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 400, 600);
-    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 24px Arial';
-    ctx.fillText(event.title, 20, 50);
-    ctx.font = '14px Arial';
-    ctx.fillText(`Ticket #: ${event.ticketNumber || 'N/A'}`, 20, 100);
-    ctx.fillText(`Seat: ${event.seatNumber || 'N/A'}`, 20, 130);
-    ctx.fillText(`Date: ${event.date}`, 20, 160);
-    ctx.fillText(`Time: ${getTimeLabel(event)}`, 20, 190);
-    ctx.fillText(`Location: ${event.location}`, 20, 220);
-    canvas.toBlob(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${event.title}-ticket.png`; a.click();
-      window.URL.revokeObjectURL(url);
-    });
+    setShowETicket(true);
   };
 
   const handleCancelConfirm = async (message) => {
@@ -429,7 +417,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
     try {
       await cancelRSVP(event.id, message);
       setShowCancelModal(false);
-      onEventCancelled?.(event.id); // Refresh the list
+      onEventCancelled?.(event.id);
     } catch (err) {
       setCancelError(err.message || 'Failed to cancel RSVP. Please try again.');
     } finally {
@@ -437,7 +425,6 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
     }
   };
 
-  /* Left accent color per state */
   const getAccentColor = () => {
     if (isEventCancelledOrDeleted) return '#6b7280';
     if (isCancelledRsvp) return '#ec4899';
@@ -487,7 +474,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
 
             {/* Info grid */}
             <div className={s.infoGrid}>
-              <InfoItem icon={Calendar} label="Date"     value={event.date} />
+              <InfoItem icon={Calendar} label="Date"     value={formatCardDate(event.date)} />
               <InfoItem icon={Clock}    label="Time"     value={getTimeLabel(event)} />
               <InfoItem icon={MapPin}   label="Location" value={truncLoc(event.location)} />
               {isPaidEvent && (
@@ -495,7 +482,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
               )}
             </div>
 
-            {/* ── EVENT CANCELLED/DELETED: Status notice ── */}
+            {/* ── EVENT CANCELLED/DELETED ── */}
             {isEventCancelledOrDeleted && (
               <div style={{
                 marginTop: 14, padding: '12px 14px',
@@ -522,7 +509,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
               </div>
             )}
 
-            {/* ── PENDING: awaiting approval notice ── */}
+            {/* ── PENDING ── */}
             {isPending && !isEventCancelledOrDeleted && (
               <div style={{
                 marginTop: 14, padding: '12px 14px',
@@ -543,7 +530,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
               </div>
             )}
 
-            {/* ── CANCELLED RSVP: notice box ── */}
+            {/* ── CANCELLED RSVP ── */}
             {isCancelledRsvp && !isEventCancelledOrDeleted && (
               <div style={{
                 marginTop: 14, padding: '12px 14px',
@@ -562,7 +549,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
               </div>
             )}
 
-            {/* ── REJECTED: reason box ── */}
+            {/* ── REJECTED ── */}
             {isRejected && rejectionNote && !isEventCancelledOrDeleted && (
               <div style={{
                 marginTop: 14, padding: '12px 14px',
@@ -633,8 +620,6 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
               </div>
             )}
 
-
-
             {/* ── CONFIRMED: ticket snippet ── */}
             {isConfirmed && (event.ticketNumber || event.seatNumber) && (
               <div style={{
@@ -662,28 +647,24 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
 
             {/* ── Actions ── */}
             <div className={s.actions} style={{ marginTop: 16 }}>
-              {/* View details — not shown for cancelled or rejected tickets, but allowed for pending refund */}
               {!isEventCancelledOrDeleted && !isCancelledRsvp && !isRejected && (
                 <button className={s.btnManage} onClick={() => onViewDetails?.(event)}>
                   <Eye size={16} /> {refundStatus === 'pending' ? 'View Refund Proof' : 'View Details'}
                 </button>
               )}
 
-              {/* E-ticket toggle — confirmed only */}
               {isConfirmed && !isEventCancelledOrDeleted && (
                 <button className={s.btnEdit} onClick={() => setShowTicket(v => !v)}>
                   <QrCode size={16} /> {showTicket ? 'Hide Ticket' : 'E-Ticket'}
                 </button>
               )}
 
-              {/* Download — confirmed only */}
               {isConfirmed && !isEventCancelledOrDeleted && (
                 <button className={s.btnIcon} onClick={handleDownloadTicket} title="Download Ticket">
                   <Download size={16} />
                 </button>
               )}
 
-              {/* Cancel RSVP — only for active RSVPs, not rejected or cancelled, but not during pending refund */}
               {!isRejected && !isCancelledRsvp && !isEventCancelledOrDeleted && !hasEventPassed(event) && refundStatus !== 'pending' && refundStatus !== 'waiting_acknowledgement' && (
                 <button
                   className={s.btnIcon}
@@ -695,7 +676,6 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
                 </button>
               )}
 
-              {/* Pending Refund status button — show during refund process */}
               {refundStatus === 'pending' && !isEventCancelledOrDeleted && (
                 <button
                   className={s.btnEdit}
@@ -715,41 +695,39 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
           </div>
         </div>
 
-        {/* ── E-Ticket panel (confirmed only) ── */}
-        {showTicket && isConfirmed && (
-          <div className={s.eticket}>
-            <div className={s.eticketInner}>
-              <div className={s.qrWrap}>
-                <div className={s.qrBox}>
-                  <QrCode style={{ width: '100%', height: '100%', color: '#1a1a2e' }} />
+        {/* ── E-Ticket panel ── */}
+        {showTicket && isConfirmed && (() => {
+          const ticketNum = event.ticketNumber || `TKT-${event.rsvpId || event.id}`;
+          const qrValue = `${FRONTEND_BASE}/verify/${event.id}/${ticketNum}`;
+          return (
+            <div className={s.eticket}>
+              <div className={s.eticketInner}>
+                <div className={s.qrWrap}>
+                  <div className={s.qrBox} style={{ background: 'white', padding: 8, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <QRCodeSVG
+                      value={qrValue}
+                      size={96}
+                      bgColor="#ffffff"
+                      fgColor="#111827"
+                      level="H"
+                    />
+                  </div>
+                  <p className={s.qrHint}>Scan at the entrance</p>
                 </div>
-                <p className={s.qrHint}>Scan at the entrance</p>
-              </div>
-              <div className={s.eticketInfo}>
-                <h4 className={s.eticketTitle}>{event.title}</h4>
-                <p className={s.eticketSub}>Electronic ticket</p>
-                <div className={s.eticketGrid}>
-                  <div>
-                    <p className={s.etLabel}>Ticket #</p>
-                    <p className={s.etValue}>{event.ticketNumber || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className={s.etLabel}>Seat</p>
-                    <p className={s.etValue}>{event.seatNumber || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className={s.etLabel}>Date</p>
-                    <p className={s.etValue}>{event.date}</p>
-                  </div>
-                  <div>
-                    <p className={s.etLabel}>Time</p>
-                    <p className={s.etValue}>{getTimeLabel(event)}</p>
+                <div className={s.eticketInfo}>
+                  <h4 className={s.eticketTitle}>{event.title}</h4>
+                  <p className={s.eticketSub}>Electronic ticket</p>
+                  <div className={s.eticketGrid}>
+                    <div><p className={s.etLabel}>Ticket #</p><p className={s.etValue}>{ticketNum}</p></div>
+                    <div><p className={s.etLabel}>Seat</p><p className={s.etValue}>{event.seatNumber || 'N/A'}</p></div>
+                    <div><p className={s.etLabel}>Date</p><p className={s.etValue}>{formatCardDate(event.date)}</p></div>
+                    <div><p className={s.etLabel}>Time</p><p className={s.etValue}>{getTimeLabel(event)}</p></div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* ── Cancel modal ── */}
@@ -773,6 +751,24 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
           ackError={refundAckError}
           onCancel={() => { setShowRefundAckModal(false); setRefundAckError(''); }}
           onConfirm={handleRefundAckConfirm}
+        />
+      )}
+
+      {/* ── ETicket Modal ── */}
+      {showETicket && isConfirmed && (
+        <ETicket
+          event={event}
+          rsvp={{ 
+            ticketNumber: event.ticketNumber || `TKT-${event.rsvpId || event.id}`, 
+            seatNumber: event.seatNumber,
+            id: event.rsvpId || event.id 
+          }}
+          guestName={                                       
+            currentUser
+              ? `${currentUser.firstname} ${currentUser.lastname}`
+              : 'Guest'
+          }
+          onClose={() => setShowETicket(false)}
         />
       )}
     </>

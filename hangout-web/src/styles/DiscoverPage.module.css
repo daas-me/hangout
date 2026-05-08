@@ -200,6 +200,28 @@
   color: white;
 }
 
+.favoriteBtn {
+  position: absolute;
+  top: 14px;
+  right: 76px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+.favoriteBtn:hover {
+  background: rgba(0, 0, 0, 0.7);
+  transform: scale(1.1);
+}
+
 .cardImgDefault {
   width: 100%;
   height: 100%;

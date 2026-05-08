@@ -12,6 +12,7 @@ const MyHangoutsPage  = lazy(() => import("./features/myHangouts/MyHangoutsPage"
 const CreateEventPage = lazy(() => import("./features/events/CreateEventPage"));
 const EventDetailPage = lazy(() => import("./features/events/EventDetailPage"));
 const ProfilePage     = lazy(() => import("./features/profile/ProfilePage"));
+const TicketVerifyPage = lazy(() => import("./features/events/TicketVerifyPage"));
 
 const ROUTES = {
   login: "/login",
@@ -367,6 +368,8 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route path="/verify/:eventId/:ticketToken" element={<TicketVerifyPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

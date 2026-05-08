@@ -3,7 +3,7 @@ import {
   ArrowLeft, Calendar, Clock, MapPin, Users, Ticket,
   Tag, Armchair, CreditCard, Heart, Share2, HelpCircle,
   CheckCircle2, ExternalLink, Edit, Trash2, Upload, Eye,
-  Lock, X, BarChart3, RefreshCcw
+  Lock, X, BarChart3, RefreshCcw, AlertTriangle
 } from 'lucide-react';
 import s from '../../styles/EventDetail.module.css';
 import { Modal } from '../../shared/components/Modal';
@@ -11,6 +11,7 @@ import { Toast } from '../../shared/components/Toast';
 import { NotificationModal } from '../../shared/components/NotificationModal';
 import { PaymentVerificationModal } from '../../shared/components/PaymentVerificationModal';
 import { publishEvent, unpublishEvent, deleteEvent as deleteEventApi, getEventDetails, rsvpEvent, cancelRSVP, checkRSVPStatus, submitPaymentProof, acknowledgeRefund } from './eventsApi';
+import { addFavorite, removeFavorite, checkIsFavorite } from './favoriteApi';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
 import HostEventDashboard from './HostEventDashboard';
 import { API_BASE, getAuthHeaders } from '../../shared/api/apiClient';
@@ -155,6 +156,9 @@ function RefundAckModal({ event, isOpen, onCancel, onConfirm, ackChoice, setAckC
 
 export default function EventDetailPage({ event, onBack, currentUser, onEditEvent }) {
   const [liked,       setLiked]       = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [favoriteError, setFavoriteError] = useState(null);
+  const [showLimitExceededModal, setShowLimitExceededModal] = useState(false);
   const [rsvped,      setRsvped]      = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(null); // 'pending', 'confirmed', or null
   const [rsvpLoading, setRsvpLoading] = useState(false);
@@ -290,6 +294,22 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
       });
   }, [event?.id, currentUser?.id]);
 
+  // Check favorite status when event loads.
+  // This endpoint requires auth — if the token is expired, swallow the error
+  // silently rather than redirecting. The user can still view the event page.
+  useEffect(() => {
+    if (!event?.id || !currentUser?.id) return;
+
+    checkIsFavorite(event.id)
+      .then(data => {
+        setLiked(data.isFavorite || false);
+        console.log('[EventDetailPage] Favorite status checked. Is favorite:', data.isFavorite);
+      })
+      .catch(err => {
+        console.warn('[EventDetailPage] Could not check favorite status:', err.message);
+      });
+  }, [event?.id, currentUser?.id]);
+
   // Auto-refresh event data every 3 seconds to update attendance count.
   // GET /api/events/:id is public — but if 401 is encountered during RSVP actions,
   // it means the auth token has expired. Log it but continue gracefully.
@@ -329,6 +349,52 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
   const displayEvent = freshEvent || event;
 
   if (!displayEvent) return null;
+
+  // Handle favorite button click
+  const handleFavoriteToggle = async () => {
+    if (!currentUser?.id) {
+      setToast({ message: 'Please log in to favorite events.', type: 'error' });
+      return;
+    }
+
+    setFavoriteLoading(true);
+    setFavoriteError(null);
+    try {
+      if (liked) {
+        // Remove favorite
+        await removeFavorite(displayEvent.id);
+        setLiked(false);
+        setToast({ message: 'Removed from favorites.', type: 'success' });
+      } else {
+        // Add favorite
+        await addFavorite(displayEvent.id);
+        setLiked(true);
+        setToast({ message: 'Added to favorites!', type: 'success' });
+      }
+    } catch (err) {
+      const message = err.message || 'An error occurred';
+      console.error('[EventDetailPage] Favorite toggle error:', err);
+      
+      // Check for limit exceeded error (409 Conflict)
+      if (message.includes('limit') || message.includes('10') || message.includes('favorite')) {
+        setShowLimitExceededModal(true);
+        setFavoriteError(message);
+      } else {
+        setToast({ message, type: 'error' });
+      }
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({ title: displayEvent.title, text: `Check out ${displayEvent.title}`, url: window.location.href });
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      alert('Link copied to clipboard!');
+    }
+  };
 
   // Show error if details failed to fetch AND we have no data to display
   if (detailsError && !displayEvent) {
@@ -395,6 +461,7 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
 
   const formatLabel = displayEvent.format ?? 'In-Person';
   const isPaid      = (displayEvent.price ?? 0) > 0;
+  const hasNoRefundPolicy = displayEvent.noRefundPolicy === true; 
   const isDraft     = displayEvent.isDraft === true;
   const eventStatus = displayEvent.eventStatus || 'active';
   const isCompleted = eventStatus === 'completed' || (!isDraft && hasEventPassed(displayEvent));
@@ -643,12 +710,13 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
           <div className={s.heroRightActions}>
             <button
               className={`${s.iconBtn} ${liked ? s.iconBtnLiked : ''}`}
-              onClick={() => setLiked(l => !l)}
+              onClick={handleFavoriteToggle}
+              disabled={favoriteLoading}
               title={liked ? 'Unlike' : 'Like'}
             >
               <Heart size={20} fill={liked ? '#ec4899' : 'none'} />
             </button>
-            <button className={s.iconBtn} title="Share">
+            <button className={s.iconBtn} onClick={handleShare} title="Share">
               <Share2 size={20} />
             </button>
           </div>
@@ -1210,6 +1278,19 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
         onCancel={() => setShowDeleteModal(false)}
       />
 
+      {/* ── Favorite Limit Exceeded Modal ── */}
+      <Modal
+        isOpen={showLimitExceededModal}
+        title="Favorite Limit Reached"
+        message={favoriteError || "You have reached your maximum of 10 favorites. Please remove a favorite from your list to add another event."}
+        confirmText="OK"
+        cancelText={null}
+        isDanger={false}
+        isLoading={false}
+        onConfirm={() => setShowLimitExceededModal(false)}
+        onCancel={() => setShowLimitExceededModal(false)}
+      />
+
       {/* ── Cancel RSVP Confirmation Modal ── */}
       {showCancelRsvpModal && (
         <div
@@ -1245,27 +1326,47 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
                 </p>
               </div>
             </div>
-
-            {/* Paid event reimbursement notice */}
-            {isPaid && (
-              <div style={{
-                display: 'flex', alignItems: 'flex-start', gap: 10,
-                padding: '12px 14px', marginBottom: 18,
-                background: 'rgba(99,102,241,0.08)',
-                border: '1px solid rgba(99,102,241,0.25)',
-                borderRadius: 10,
-              }}>
-                <RefreshCcw size={16} style={{ color: '#818cf8', flexShrink: 0, marginTop: 1 }} />
-                <div>
-                  <p style={{ color: '#a5b4fc', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: 12, margin: '0 0 2px' }}>
-                    Paid Event — Reimbursement Request
-                  </p>
-                  <p style={{ color: '#818cf8', fontFamily: 'DM Sans, sans-serif', fontSize: 12, margin: 0, lineHeight: 1.5 }}>
-                    Cancelling a paid RSVP will initiate a reimbursement request. Please explain your reason below to help the host process it.
-                  </p>
+            {/* Paid event - refundable */}
+              {isPaid && !hasNoRefundPolicy && (
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  padding: '12px 14px', marginBottom: 18,
+                  background: 'rgba(99,102,241,0.08)',
+                  border: '1px solid rgba(99,102,241,0.25)',
+                  borderRadius: 10,
+                }}>
+                  <RefreshCcw size={16} style={{ color: '#818cf8', flexShrink: 0, marginTop: 1 }} />
+                  <div>
+                    <p style={{ color: '#a5b4fc', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: 12, margin: '0 0 2px' }}>
+                      Paid Event — Reimbursement Request
+                    </p>
+                    <p style={{ color: '#818cf8', fontFamily: 'DM Sans, sans-serif', fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+                      Cancelling a paid RSVP will initiate a reimbursement request. Please explain your reason below to help the host process it.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Paid event - non-refundable */}
+              {isPaid && hasNoRefundPolicy && (
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  padding: '12px 14px', marginBottom: 18,
+                  background: 'rgba(239,68,68,0.08)',
+                  border: '1px solid rgba(239,68,68,0.25)',
+                  borderRadius: 10,
+                }}>
+                  <AlertTriangle size={16} style={{ color: '#f87171', flexShrink: 0, marginTop: 1 }} />
+                  <div>
+                    <p style={{ color: '#fca5a5', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: 12, margin: '0 0 2px' }}>
+                      Non-Refundable Event
+                    </p>
+                    <p style={{ color: '#f87171', fontFamily: 'DM Sans, sans-serif', fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+                      You acknowledged this event has a no-refund policy. Cancelling will remove your RSVP with no refund issued.
+                    </p>
+                  </div>
+                </div>
+              )}
 
             <textarea
               value={cancelReason}
@@ -1362,7 +1463,11 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
                 }}
                 disabled={rsvpLoading}
               >
-                {rsvpLoading ? '⟳ Cancelling…' : 'Cancel RSVP'}
+                {rsvpLoading
+                  ? '⟳ Cancelling…'
+                  : isPaid && !hasNoRefundPolicy
+                  ? 'Cancel & Request Refund'
+                  : 'Cancel RSVP'}
               </button>
             </div>
           </div>

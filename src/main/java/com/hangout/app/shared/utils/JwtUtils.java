@@ -35,7 +35,7 @@ public class JwtUtils {
         } catch (ExpiredJwtException e) {
             System.err.println("[JwtUtils] Token expired: " + e.getMessage());
             return false;
-        } catch (SignatureException e) {
+        } catch (SecurityException e) {
             System.err.println("[JwtUtils] Invalid token signature: " + e.getMessage());
             return false;
         } catch (MalformedJwtException e) {
