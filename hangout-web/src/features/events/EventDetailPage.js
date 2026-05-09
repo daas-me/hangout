@@ -3,7 +3,7 @@ import {
   ArrowLeft, Calendar, Clock, MapPin, Users, Ticket,
   Tag, Armchair, CreditCard, Heart, Share2,
   CheckCircle2, ExternalLink, Edit, Trash2, Upload, Eye,
-  Lock, X, BarChart3, RefreshCcw, AlertTriangle
+  Lock, X, BarChart3, RefreshCcw, AlertTriangle, MessageCircle
 } from 'lucide-react';
 import s from '../../styles/EventDetail.module.css';
 import { Modal } from '../../shared/components/Modal';
@@ -13,8 +13,382 @@ import { PaymentVerificationModal } from '../../shared/components/PaymentVerific
 import { publishEvent, unpublishEvent, deleteEvent as deleteEventApi, getEventDetails, rsvpEvent, cancelRSVP, checkRSVPStatus, submitPaymentProof, acknowledgeRefund } from './eventsApi';
 import { addFavorite, removeFavorite, checkIsFavorite } from './favoriteApi';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
+import { getPublicUserProfile, getUserHostingCount } from '../profile/profileApi';
+import { calculateAge } from '../../shared/utils/ageCalculator';
 import HostEventDashboard from './HostEventDashboard';
 import { API_BASE, getAuthHeaders } from '../../shared/api/apiClient';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ProfileAvatar — renders user avatar with initials fallback
+───────────────────────────────────────────────────────────────────────────── */
+function getProfilePhoto(person) {
+  if (!person) return null;
+  return person.photoUrl || person.photo || person.avatarUrl || person.userPhoto || person.profilePhoto || null;
+}
+
+function ProfileAvatar({ person, name, size = 40, gradient = 'linear-gradient(135deg, #A855F7 0%, #EC4899 100%)' }) {
+  const src = getProfilePhoto(person);
+  const initials = (name ? name.split(' ').map(part => part[0]).join('') : '').toUpperCase() || 'NA';
+  return src ? (
+    <img
+      src={src}
+      alt={name}
+      style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+    />
+  ) : (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        flexShrink: 0,
+        background: gradient,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'white',
+        fontWeight: 700,
+        fontSize: Math.max(12, Math.floor(size / 2.2)),
+        fontFamily: 'Syne, sans-serif',
+      }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   HostProfileModal — Host profile widget showing contact & detailed info
+───────────────────────────────────────────────────────────────────────────── */
+function HostProfileModal({ host, onClose, onMessage }) {
+  if (!host) return null;
+
+  // Build address string
+  const addressParts = [host.city, host.state, host.country, host.zipcode].filter(Boolean);
+  const address = addressParts.length > 0 ? addressParts.join(', ') : null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 70,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16, background: 'rgba(0,0,0,0.85)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: 'rgba(30, 32, 60, 0.5)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: 24,
+          border: '1px solid rgba(255,255,255,0.1)',
+          width: '100%',
+          maxWidth: 420,
+          overflow: 'hidden',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: 16, right: 16, background: 'none', border: 'none',
+            color: '#9ca3af', cursor: 'pointer', padding: 8, zIndex: 10,
+          }}
+          onMouseEnter={e => e.target.style.color = '#f0eeff'}
+          onMouseLeave={e => e.target.style.color = '#9ca3af'}
+        >
+          <X size={20} />
+        </button>
+
+        {/* Header with gradient background */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%)',
+          padding: '40px 24px 28px',
+          textAlign: 'center',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
+        }}>
+          {/* Avatar */}
+          <div style={{ marginBottom: 18 }}>
+            <ProfileAvatar person={host} name={host.name} size={88} />
+          </div>
+
+          {/* Name */}
+          <h2 style={{
+            color: '#f0eeff',
+            fontFamily: "'Syne', sans-serif",
+            fontWeight: 700,
+            fontSize: '1.5rem',
+            margin: '0 0 8px 0',
+          }}>
+            {host.name}
+          </h2>
+
+          {/* Verified Badge */}
+          <p style={{
+            color: '#10b981',
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '0.85rem',
+            margin: '0 0 8px 0',
+            fontWeight: 600,
+          }}>
+            ✓ HangOut Organizer
+          </p>
+
+          {/* Email */}
+          <a 
+            href={`mailto:${host.email}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              window.location.href = `mailto:${host.email}`;
+            }}
+            style={{
+              color: '#a855f7',
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: '0.9rem',
+              margin: 0,
+              fontWeight: 500,
+              textDecoration: 'none',
+              cursor: 'pointer',
+              transition: 'color 0.2s ease',
+              display: 'inline-block',
+            }}
+            onMouseEnter={e => e.target.style.color = '#d946ef'}
+            onMouseLeave={e => e.target.style.color = '#a855f7'}
+          >
+            {host.email}
+          </a>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '24px' }}>
+          {/* Hosting Stats Section */}
+          {(host.hostedCount !== undefined || host.birthDate) && (
+            <div style={{ marginBottom: 20 }}>
+              <h4 style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.75rem',
+                color: '#a855f7',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                margin: '0 0 12px 0',
+                opacity: 0.8,
+              }}>
+                Hosting Stats
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {host.hostedCount !== undefined && (
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 14px', borderRadius: 10,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                  }}>
+                    <span style={{
+                      color: '#9ca3af',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                    }}>HangOuts Organized</span>
+                    <span style={{
+                      color: '#e5e7eb',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.9rem',
+                      fontWeight: 500,
+                    }}>{host.hostedCount}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Personal Information Section */}
+          {(host.gender || host.phone || host.birthDate) && (
+            <div style={{ marginBottom: 20 }}>
+              <h4 style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.75rem',
+                color: '#a855f7',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                margin: '0 0 12px 0',
+                opacity: 0.8,
+              }}>
+                Personal Information
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {calculateAge(host.birthDate) && (
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 14px', borderRadius: 10,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                  }}>
+                    <span style={{
+                      color: '#9ca3af',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                    }}>Age</span>
+                    <span style={{
+                      color: '#e5e7eb',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.9rem',
+                      fontWeight: 500,
+                    }}>{calculateAge(host.birthDate)} years</span>
+                  </div>
+                )}
+                {host.gender && (
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 14px', borderRadius: 10,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                  }}>
+                    <span style={{
+                      color: '#9ca3af',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                    }}>Gender</span>
+                    <span style={{
+                      color: '#e5e7eb',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.9rem',
+                      fontWeight: 500,
+                    }}>{host.gender}</span>
+                  </div>
+                )}
+                {host.phone && (
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 14px', borderRadius: 10,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                  }}>
+                    <span style={{
+                      color: '#9ca3af',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                    }}>Phone</span>
+                    <span style={{
+                      color: '#e5e7eb',
+                      fontFamily: "'DM Sans', sans-serif",
+                      fontSize: '0.9rem',
+                      fontWeight: 500,
+                    }}>{host.phone}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Address Section */}
+          {address && (
+            <div style={{ marginBottom: 20 }}>
+              <h4 style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.75rem',
+                color: '#a855f7',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                margin: '0 0 12px 0',
+                opacity: 0.8,
+              }}>
+                Location
+              </h4>
+              <div style={{
+                padding: '12px 14px',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.05)',
+              }}>
+                <p style={{
+                  color: '#e5e7eb',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.9rem',
+                  margin: 0,
+                  lineHeight: 1.5,
+                }}>{address}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Bio Section */}
+          {host.bio && (
+            <div style={{ marginBottom: 20 }}>
+              <h4 style={{
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: '0.75rem',
+                color: '#a855f7',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                margin: '0 0 12px 0',
+                opacity: 0.8,
+              }}>
+                About
+              </h4>
+              <div style={{
+                padding: '12px 14px',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.05)',
+              }}>
+                <p style={{
+                  color: '#d1d5db',
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: '0.85rem',
+                  margin: 0,
+                  lineHeight: 1.6,
+                }}>{host.bio}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Message button */}
+          <button
+            onClick={() => { onMessage(host); onClose(); }}
+            onMouseEnter={e => {
+              e.target.style.opacity = '0.9';
+              e.target.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={e => {
+              e.target.style.opacity = '1';
+              e.target.style.transform = 'translateY(0)';
+            }}
+            style={{
+              width: '100%',
+              padding: '13px 16px',
+              borderRadius: 12,
+              border: 'none',
+              background: 'linear-gradient(135deg, #A855F7, #EC4899)',
+              color: 'white',
+              fontFamily: "'DM Sans', sans-serif",
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <MessageCircle size={16} /> Message {host.name.split(' ')[0]}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function RefundAckModal({ event, isOpen, onCancel, onConfirm, ackChoice, setAckChoice, rejectionReason, setRejectionReason, acknowledging, ackError }) {
   if (!isOpen || !event) return null;
@@ -182,6 +556,10 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
   const [refundAcknowledging, setRefundAcknowledging] = useState(false);
   const [refundAckError, setRefundAckError] = useState('');
   const [showingManageDashboard, setShowingManageDashboard] = useState(false);
+  
+  // Host Profile Modal state
+  const [showHostProfileModal, setShowHostProfileModal] = useState(false);
+  const [hostData, setHostData] = useState(null);
 
   // Optimistically adjust the local attendee count when the network refresh
   // is unavailable (e.g. token expired). Keeps the UI in sync after RSVP / cancel.
@@ -196,6 +574,41 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
       }
       return { ...prev, attendeeCount: next };
     });
+  };
+
+  // Fetch host profile data when opening modal
+  const handleOpenHostProfileModal = async () => {
+    const hostId = freshEvent?.hostId ?? freshEvent?.host?.id;
+    console.log('[EventDetailPage] Host modal clicked. freshEvent:', freshEvent);
+    console.log('[EventDetailPage] hostId:', hostId);
+    
+    if (!hostId) {
+      console.warn('[EventDetailPage] No hostId found. freshEvent fields:', Object.keys(freshEvent || {}));
+      return;
+    }
+    
+    setShowHostProfileModal(true);
+    
+    try {
+      // Fetch host profile and hosting count in parallel
+      console.log('[EventDetailPage] Fetching host data for ID:', hostId);
+      const [profileData, hostCount] = await Promise.all([
+        getPublicUserProfile(hostId),
+        getUserHostingCount(hostId)
+      ]);
+      
+      console.log('[EventDetailPage] Profile data received:', profileData);
+      console.log('[EventDetailPage] Host count received:', hostCount);
+      
+      setHostData({
+        ...profileData,
+        hostedCount: hostCount || 0
+      });
+    } catch (err) {
+      console.error('[EventDetailPage] Error fetching host data:', err);
+      setToast({ message: 'Could not load host profile. Please try again.', type: 'error' });
+      setShowHostProfileModal(false);
+    }
   };
 
   const handleRefundAckConfirm = async (acknowledgement, rejectionReason) => {
@@ -261,7 +674,7 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
 
         if (message.includes('403')) {
           if (message.includes('draft')) {
-            setDetailsError('This is a draft HangOut. Only the HangOut host can view draft HangOuts.');
+            setDetailsError('This is a draft HangOut. Only the HangOut organizer can view draft HangOuts.');
           } else {
             setDetailsError('You do not have permission to view this HangOut. This HangOut may have been deleted or you may not have access.');
           }
@@ -456,7 +869,7 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
   const hostLast  = displayEvent.hostLastName  ?? displayEvent.host?.lastname  ?? '';
   const hostEmail = displayEvent.hostEmail     ?? displayEvent.host?.email     ?? 'host@example.com';
   const hostPhoto = displayEvent.hostPhoto ?? displayEvent.host?.photoUrl ?? null;
-  const hostName  = [hostFirst, hostLast].filter(Boolean).join(' ') || 'HangOut Host';
+  const hostName  = [hostFirst, hostLast].filter(Boolean).join(' ') || 'HangOut Organizer';
   const initials  = hostName.split(' ').map(name => name[0]).join('').slice(0, 2).toUpperCase() || 'HO';
 
   const formatLabel = displayEvent.format ?? 'In-Person';
@@ -860,12 +1273,35 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
             <div className={s.cardFlat}>
               <p className={s.sectionTitle}>Hosted By</p>
               <div className={s.hostRow}>
-                <div className={s.avatar} style={hostPhoto ? { backgroundImage: `url(${hostPhoto})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
+                <div 
+                  className={s.avatar} 
+                  style={{
+                    backgroundImage: hostPhoto ? `url(${hostPhoto})` : undefined, 
+                    backgroundSize: 'cover', 
+                    backgroundPosition: 'center',
+                    cursor: 'pointer',
+                    transition: 'opacity 0.2s ease'
+                  }}
+                  onClick={handleOpenHostProfileModal}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                >
                   {!hostPhoto && initials.toUpperCase()}
                 </div>
                 <div>
                   <div className={s.hostNameRow}>
-                    <p className={s.cardValue}>{hostName}</p>
+                    <p 
+                      className={s.cardValue}
+                      style={{
+                        cursor: 'pointer',
+                        transition: 'color 0.2s ease'
+                      }}
+                      onClick={handleOpenHostProfileModal}
+                      onMouseEnter={e => e.currentTarget.style.color = '#a855f7'}
+                      onMouseLeave={e => e.currentTarget.style.color = '#e5e7eb'}
+                    >
+                      {hostName}
+                    </p>
                     <div className={s.verified}>✓</div>
                   </div>
                   <p className={s.cardLabel}>HangOut Organizer</p>
@@ -1216,6 +1652,80 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
         acknowledging={refundAcknowledging}
         ackError={refundAckError}
       />
+
+      {/* Host Profile Modal */}
+      {showHostProfileModal && (
+        <>
+          {hostData ? (
+            <HostProfileModal
+              host={hostData}
+              onClose={() => {
+                setShowHostProfileModal(false);
+                setHostData(null);
+              }}
+              onMessage={(host) => {
+                onMessageUser?.({
+                  id: host.id,
+                  firstname: host.name?.split(' ')[0] || '',
+                  lastname: host.name?.split(' ').slice(1).join(' ') || '',
+                  email: host.email,
+                  photo: host.photoUrl || host.photo,
+                });
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                position: 'fixed', inset: 0, zIndex: 70,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 16, background: 'rgba(0,0,0,0.85)',
+              }}
+              onClick={() => {
+                setShowHostProfileModal(false);
+                setHostData(null);
+              }}
+            >
+              <div
+                style={{
+                  background: 'rgba(30, 32, 60, 0.5)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  borderRadius: 24,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  padding: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'column',
+                  gap: 16,
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '50%',
+                    border: '3px solid rgba(168, 85, 247, 0.3)',
+                    borderTopColor: '#a855f7',
+                    animation: 'spin 1s linear infinite',
+                  }}
+                />
+                <p style={{ color: '#9ca3af', fontFamily: "'DM Sans', sans-serif", fontSize: '0.9rem', margin: 0 }}>
+                  Loading profile...
+                </p>
+              </div>
+              <style>
+                {`
+                  @keyframes spin {
+                    to { transform: rotate(360deg); }
+                  }
+                `}
+              </style>
+            </div>
+          )}
+        </>
+      )}
 
       {selectedRefundImage && (
         <div

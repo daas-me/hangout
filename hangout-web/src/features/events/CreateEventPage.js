@@ -5,7 +5,7 @@ import { Toast } from '../../shared/components/Toast';
 import {
   Upload, Calendar, Clock, FileText, Type, MapPin, Users,
   Armchair, Ticket, CreditCard, Building2, Eye, Send,
-  Save, Laptop, Tag, X, User
+  Save, Laptop, Tag, X, User, Lock
 } from 'lucide-react';
 import { formatTo12Hour } from '../../shared/utils/timeFormatter';
 import s from '../../styles/CreateEventPage.module.css';
@@ -330,6 +330,32 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
       setPublishing(false);
     }
   };
+
+  // Check if user can create events
+  if (!user?.profileComplete) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1a1b3d 0%, #0a0b1e 50%, #1a1b3d 100%)', color: 'white', display: 'flex', flexDirection: 'column' }}>
+        <Navbar user={user} onLogout={onLogout} onNavigate={onNavigate} activePage="create" />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
+          <div style={{ background: 'rgba(30, 32, 60, 0.5)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, width: '100%', maxWidth: 500, padding: 48, textAlign: 'center' }}>
+            <Lock size={48} color="#a855f7" style={{ margin: '0 auto 24px' }} />
+            <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: '2rem', fontWeight: 700, color: 'white', margin: '0 0 16px' }}>Hosting Locked</h2>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.6, margin: '0 0 32px' }}>
+              Complete your profile to unlock the ability to create HangOuts. Fill in your phone number, city, and bio to get started.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => onNavigate?.('profile')} style={{ flex: 1, padding: '14px', borderRadius: 12, background: 'linear-gradient(135deg, #7c3aed, #a855f7)', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer' }}>
+                Complete Profile
+              </button>
+              <button onClick={() => onNavigate?.('home')} style={{ flex: 1, padding: '14px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer' }}>
+                Back to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (preview) {
     return (

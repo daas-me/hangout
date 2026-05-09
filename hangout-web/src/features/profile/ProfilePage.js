@@ -2,10 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import { Navbar } from '../../shared/components/Navbar';
 import {
   Camera, Calendar, Users, TrendingUp, ChevronRight,
-  User, Bell, Mail, Settings, LogOut,
-  Phone, MapPin, CheckCircle2, CreditCard, IdCard,
-  Lock, Save, CheckCircle, AlertCircle, X, Trash2, Upload
+  User, Settings, LogOut,
+  Phone, MapPin, CheckCircle2,
+  Lock, Save, CheckCircle, AlertCircle, X, Trash2, Upload, Mail
 } from 'lucide-react';
+import { calculateAge } from '../../shared/utils/ageCalculator';
 import {
   fetchUserProfile,
   fetchUserPhoto,
@@ -14,6 +15,7 @@ import {
   uploadUserPhoto,
   deleteUserPhoto,
   changeUserPassword,
+  deleteUserAccount,
 } from './profileApi';
 
 const cardStyle = {
@@ -34,7 +36,7 @@ function Modal({ show, onClose, title, children }) {
   if (!show) return null;
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ ...cardStyle, width: '100%', maxWidth: 500, padding: 32, position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="custom-scrollbar" style={{ ...cardStyle, width: '100%', maxWidth: 500, padding: 32, position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.3rem', fontWeight: 700, color: 'white', margin: 0 }}>{title}</h3>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#9ca3af', cursor: 'pointer', padding: '6px', display: 'flex' }}>
@@ -119,12 +121,14 @@ function Field({ label, value, onChange, type = 'text', placeholder, error, succ
 }
 
 export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated }) {
-  const [profile, setProfile]   = useState({ firstname: user?.firstname || '', lastname: user?.lastname || '', email: user?.email || '' });
+  const [profile, setProfile]   = useState({ firstname: user?.firstname || '', lastname: user?.lastname || '', email: user?.email || '', phone: '', city: '', bio: '', street: '', state: '', country: '', zipcode: '', birthdate: '', gender: '' });
   const [photo, setPhoto]       = useState(null);
   const [stats, setStats]       = useState({ hostingCount: 0, attendingCount: 0, totalAttendees: 0 });
+  const [completionPercent, setCompletionPercent] = useState(0);
+  const [profileComplete, setProfileComplete]     = useState(false);
 
   const [showEditProfile, setShowEditProfile] = useState(false);
-  const [editForm, setEditForm]               = useState({ firstname: '', lastname: '' });
+  const [editForm, setEditForm]               = useState({ firstname: '', lastname: '', phone: '', city: '', bio: '', street: '', state: '', country: '', zipcode: '', gender: '', birthdate: '' });
   const [editErrors, setEditErrors]           = useState({});
   const [profileMsg, setProfileMsg]           = useState(null);
   const [savingProfile, setSavingProfile]     = useState(false);
@@ -144,6 +148,10 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+  const [deleteAccountStep, setDeleteAccountStep] = useState(1); // 1 or 2
+  const [deleteHovered, setDeleteHovered] = useState(false); // hover state for delete button
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const fileRef = useRef();
   const onUserUpdatedRef = useRef(onUserUpdated);
@@ -160,8 +168,34 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
     const loadProfileData = async () => {
       try {
         const data = await fetchUserProfile(false);
-        setProfile({ firstname: data.firstname || '', lastname: data.lastname || '', email: data.email || '' });
-        setEditForm({ firstname: data.firstname || '', lastname: data.lastname || '' });
+        setProfile({ 
+          firstname: data.firstname || '', 
+          lastname: data.lastname || '', 
+          email: data.email || '', 
+          phone: data.phone || '',
+          city: data.city || '',
+          bio: data.bio || '',
+          street: data.street || '',
+          state: data.state || '',
+          country: data.country || '',
+          zipcode: data.zipcode || '',
+          birthdate: data.birthdate || '',
+          gender: data.gender || ''
+        });
+        setEditForm({ 
+          firstname: data.firstname || '', 
+          lastname: data.lastname || '',
+          phone: data.phone || '',
+          city: data.city || '',
+          bio: data.bio || '',
+          street: data.street || '',
+          state: data.state || '',
+          country: data.country || '',
+          zipcode: data.zipcode || '',
+          gender: data.gender || ''
+        });
+        setCompletionPercent(data.completionPercent || 0);
+        setProfileComplete(data.profileComplete || false);
         onUserUpdatedRef.current?.({ ...userRef.current, firstname: data.firstname, lastname: data.lastname });
       } catch (err) {
         console.error('Profile load failed:', err);
@@ -201,7 +235,7 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
   };
 
   const openEditProfile = () => {
-    setEditForm({ firstname: profile.firstname, lastname: profile.lastname });
+    setEditForm({ firstname: profile.firstname, lastname: profile.lastname, phone: profile.phone, city: profile.city, bio: profile.bio, street: profile.street, state: profile.state, country: profile.country, zipcode: profile.zipcode, gender: profile.gender, birthdate: profile.birthdate });
     setEditErrors({});
     setProfileMsg(null);
     setPhotoMsg(null);
@@ -217,24 +251,57 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
     if (Object.keys(e).length) { setEditErrors(e); return; }
     setSavingProfile(true); setProfileMsg(null);
     try {
-      await updateUserProfile({ firstname: editForm.firstname, lastname: editForm.lastname });
+      await updateUserProfile({ firstname: editForm.firstname, lastname: editForm.lastname, phone: editForm.phone, city: editForm.city, bio: editForm.bio, street: editForm.street, state: editForm.state, country: editForm.country, zipcode: editForm.zipcode, gender: editForm.gender });
 
       if (photoAction === 'upload' && photoFile) {
         const fd = new FormData(); fd.append('photo', photoFile);
         const uploadResult = await uploadUserPhoto(fd);
         const photoUrl = uploadResult?.imageUrl || uploadResult?.photo || editPhoto;
         setPhoto(photoUrl);
-        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: photoUrl, photo: photoUrl });
       } else if (photoAction === 'remove') {
         await deleteUserPhoto();
         setPhoto(null);
-        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: null, photo: null });
-      } else {
-        // Even if photo wasn't changed, refresh it to ensure it's loaded
-        onUserUpdated?.({ ...user, firstname: editForm.firstname, lastname: editForm.lastname, photoUrl: photo, photo: photo });
       }
 
-      setProfile(p => ({ ...p, firstname: editForm.firstname, lastname: editForm.lastname }));
+      // Reload profile data to get updated completionPercent and profileComplete
+      const updatedProfile = await fetchUserProfile(false);
+      setCompletionPercent(updatedProfile.completionPercent || 0);
+      setProfileComplete(updatedProfile.profileComplete || false);
+      setProfile({ 
+        firstname: updatedProfile.firstname || '', 
+        lastname: updatedProfile.lastname || '', 
+        email: updatedProfile.email || '', 
+        phone: updatedProfile.phone || '',
+        city: updatedProfile.city || '',
+        bio: updatedProfile.bio || '',
+        street: updatedProfile.street || '',
+        state: updatedProfile.state || '',
+        country: updatedProfile.country || '',
+        zipcode: updatedProfile.zipcode || '',
+        birthdate: updatedProfile.birthdate || '',
+        gender: updatedProfile.gender || ''
+      });
+
+      // Update parent component with new profile data including hosting eligibility
+      const photoUrl = photoAction === 'remove' ? null : (photoAction === 'upload' ? (photo || updatedProfile.photoUrl) : updatedProfile.photoUrl);
+      onUserUpdated?.({ 
+        ...user, 
+        firstname: updatedProfile.firstname, 
+        lastname: updatedProfile.lastname, 
+        phone: updatedProfile.phone, 
+        city: updatedProfile.city, 
+        bio: updatedProfile.bio,
+        street: updatedProfile.street,
+        state: updatedProfile.state,
+        country: updatedProfile.country,
+        zipcode: updatedProfile.zipcode,
+        gender: updatedProfile.gender,
+        profileComplete: updatedProfile.profileComplete,
+        completionPercent: updatedProfile.completionPercent,
+        photoUrl: photoUrl, 
+        photo: photoUrl 
+      });
+
       setProfileMsg({ type: 'success', text: 'Profile updated!' });
       setTimeout(() => { setShowEditProfile(false); setProfileMsg(null); }, 1200);
     } catch (err) {
@@ -266,6 +333,20 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
       setPasswordMsg({ type: 'error', text: err.message });
     } finally {
       setSavingPw(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await deleteUserAccount();
+      // Account deleted successfully, log out the user
+      setShowDeleteAccountConfirm(false);
+      setTimeout(() => onLogout(), 300);
+    } catch (err) {
+      console.error('Delete account failed:', err);
+      alert('Error: ' + (err.message || 'Failed to delete account'));
+      setDeletingAccount(false);
     }
   };
 
@@ -347,6 +428,28 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
                 ))}
               </div>
 
+              {/* Profile Completion Progress Bar */}
+              <div style={{ padding: 16, borderRadius: 12, background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)', marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <label style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#c4c0dd', fontWeight: 600 }}>Hosting Eligibility</label>
+                  {profileComplete && <CheckCircle2 size={16} color="#22c55e" />}
+                </div>
+                <div style={{ width: '100%', height: 8, background: 'rgba(0,0,0,0.3)', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
+                  <div style={{ height: '100%', width: `${completionPercent}%`, background: 'linear-gradient(90deg, #7c3aed 0%, #a855f7 100%)', transition: 'width 0.3s' }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: 0 }}>
+                    {completionPercent === 100 ? '✓ Complete - Unlocked' : `${Math.ceil(completionPercent / 11.11)} of 9 fields`}
+                  </p>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#a855f7', fontWeight: 600, margin: 0 }}>{completionPercent}%</p>
+                </div>
+                {completionPercent < 100 && (
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.73rem', color: '#9ca3af', margin: '8px 0 0', lineHeight: 1.4 }}>
+                    Complete your profile with all required fields (name, gender, birthdate, phone, street/barangay, municipality/city, province, country, zip, bio) to unlock hosting
+                  </p>
+                )}
+              </div>
+
               <button onClick={openEditProfile}
                 style={{ width: '100%', padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontFamily: "'DM Sans',sans-serif", fontWeight: 600, fontSize: '0.92rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'box-shadow 0.2s' }}
                 onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(168,85,247,0.35)'}
@@ -368,10 +471,12 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 {[
-                  { icon: User,   label: 'Full Name',     value: fullName      },
-                  { icon: Mail,   label: 'Email Address', value: profile.email },
-                  { icon: Phone,  label: 'Phone Number',  value: '—'           },
-                  { icon: MapPin, label: 'Location',      value: '—'           },
+                  { icon: User,   label: 'Full Name',     value: fullName                },
+                  { icon: Mail,   label: 'Email Address', value: profile.email           },
+                  { icon: Phone,  label: 'Phone Number',  value: profile.phone || '—'    },
+                  { icon: User,   label: 'Gender',        value: profile.gender || '—'   },
+                  { icon: Calendar, label: 'Birthdate',   value: profile.birthdate ? new Date(profile.birthdate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                  { icon: Calendar, label: 'Age',         value: profile.birthdate ? (calculateAge(profile.birthdate) || '—') : '—' },
                 ].map(({ icon: Icon, label, value }) => (
                   <div key={label}>
                     <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>{label}</p>
@@ -379,106 +484,77 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
                   </div>
                 ))}
               </div>
+              {/* Address Information */}
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.88rem', fontWeight: 600, color: '#c4c0dd', margin: '0 0 12px' }}>Address</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Street/Barangay</p>
+                    <div style={infoBox}><MapPin size={18} color="#a855f7" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{profile.street || '—'}</span></div>
+                  </div>
+                  <div>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Municipality/City</p>
+                    <div style={infoBox}><MapPin size={18} color="#a855f7" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{profile.city || '—'}</span></div>
+                  </div>
+                  <div>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>State/Province</p>
+                    <div style={infoBox}><MapPin size={18} color="#a855f7" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{profile.state || '—'}</span></div>
+                  </div>
+                  <div>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Country</p>
+                    <div style={infoBox}><MapPin size={18} color="#a855f7" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{profile.country || '—'}</span></div>
+                  </div>
+                  <div>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Zip Code</p>
+                    <div style={infoBox}><MapPin size={18} color="#a855f7" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{profile.zipcode || '—'}</span></div>
+                  </div>
+                </div>
+              </div>
+              {profile.bio && (
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Bio</p>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{profile.bio}</p>
+                </div>
+              )}
             </div>
 
             {/* Host Verification */}
-            <div style={{ ...cardStyle, padding: 32, background: 'rgba(59,130,246,0.05)', borderColor: 'rgba(59,130,246,0.3)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <CheckCircle2 size={22} color="#60a5fa" />
-                  <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.4rem', fontWeight: 600, margin: 0, color: 'white' }}>Host Verification</h3>
-                </div>
-                <span style={{ padding: '6px 16px', borderRadius: 999, background: 'rgba(34,197,94,0.2)', color: '#22c55e', fontFamily: "'DM Sans',sans-serif", fontWeight: 600, fontSize: '0.85rem' }}>Verified</span>
-              </div>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.6, margin: '0 0 24px' }}>
-                Verified hosts can receive payments and create paid events. Complete your verification to build trust with attendees.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                {[{ icon: IdCard, label: 'Legal Full Name', value: fullName || '—' }, { icon: Calendar, label: 'Date of Birth', value: '—' }].map(({ icon: Icon, label, value }) => (
-                  <div key={label}>
-                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>{label}</p>
-                    <div style={infoBox}><Icon size={18} color="#60a5fa" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{value}</span></div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Full Address</p>
-                <div style={infoBox}><MapPin size={18} color="#60a5fa" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>—</span></div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                {[{ icon: IdCard, label: 'Valid ID Type', value: '—' }, { icon: IdCard, label: 'ID Number', value: '—' }].map(({ icon: Icon, label, value }) => (
-                  <div key={label}>
-                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>{label}</p>
-                    <div style={infoBox}><Icon size={18} color="#60a5fa" /><span style={{ fontFamily: "'DM Sans',sans-serif", color: 'white' }}>{value}</span></div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>ID Document Upload</p>
-                <div style={{ padding: 24, borderRadius: 12, border: '2px dashed rgba(59,130,246,0.3)', background: 'rgba(59,130,246,0.05)', textAlign: 'center' }}>
-                  <CheckCircle2 size={28} color="#60a5fa" style={{ margin: '0 auto 8px' }} />
-                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: 'white', margin: '0 0 4px' }}>ID Verified</p>
-                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#9ca3af', margin: 0 }}>Your identification has been verified</p>
-                </div>
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#9ca3af', margin: '0 0 8px' }}>Payment Account Information</p>
-                <div style={{ ...infoBox, justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <CreditCard size={18} color="#60a5fa" />
-                    <div>
-                      <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: 'white', margin: 0, fontSize: '0.9rem' }}>GCash: —</p>
-                      <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.78rem' }}>Not set up yet</p>
-                    </div>
-                  </div>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#6b7280' }} />
-                </div>
-              </div>
-              <div style={{ padding: '14px 16px', borderRadius: 12, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)' }}>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#93c5fd', margin: 0, lineHeight: 1.6 }}>
-                  ✓ Verification ensures that the person hosting events and receiving payments is properly identified, building trust and security for all attendees.
-                </p>
-              </div>
-            </div>
+            {/* Removed - Not needed for MVP */}
 
             {/* Account Settings */}
             <div style={{ ...cardStyle, padding: 32 }}>
               <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.4rem', fontWeight: 600, margin: '0 0 20px', color: 'white' }}>Account Settings</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <SettingsBtn icon={User} label="Personal Information" sub="Update your details"       onClick={openEditProfile} />
-                <SettingsBtn icon={Bell} label="Notifications"        sub="Manage your alerts" />
                 <SettingsBtn icon={Lock} label="Privacy & Security"   sub="Change password & privacy" onClick={openChangePw} />
-                <SettingsBtn icon={Mail} label="Email Preferences"    sub="Communication settings" />
-              </div>
-            </div>
-
-            {/* App Settings + Danger Zone */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-              <div style={{ ...cardStyle, padding: 24 }}>
-                <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.15rem', fontWeight: 600, margin: '0 0 16px', color: 'white' }}>App Settings</h3>
                 <SettingsBtn icon={Settings} label="Preferences" sub="Customize your experience" />
               </div>
-              <div style={{ ...cardStyle, padding: 24, background: 'rgba(239,68,68,0.05)', borderColor: 'rgba(239,68,68,0.3)' }}>
-                <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.15rem', fontWeight: 600, margin: '0 0 16px', color: '#f87171' }}>Danger Zone</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <button onClick={() => setShowLogoutConfirm(true)}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(248,113,113,0.25)', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <LogOut size={18} color="#f87171" />
-                      <div style={{ textAlign: 'left' }}>
-                        <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: '#f87171', margin: 0, fontSize: '0.9rem' }}>Sign Out</p>
-                        <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.78rem' }}>Log out of your account</p>
-                      </div>
+
+              {/* Danger Actions */}
+              <div style={{ marginTop: 28, paddingTop: 0 }}>
+                {/* Sign Out */}
+                <button onClick={() => setShowLogoutConfirm(true)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(248,113,113,0.25)', cursor: 'pointer', transition: 'background 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <LogOut size={18} color="#f87171" />
+                    <div style={{ textAlign: 'left' }}>
+                      <p style={{ fontFamily: "'DM Sans',sans-serif", fontWeight: 600, color: '#f87171', margin: 0, fontSize: '0.9rem' }}>Sign Out</p>
+                      <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#9ca3af', margin: 0, fontSize: '0.78rem' }}>Log out of your account</p>
                     </div>
-                    <ChevronRight size={16} color="#f87171" />
-                  </button>
+                  </div>
+                  <ChevronRight size={16} color="#f87171" />
+                </button>
+
+                {/* Delete Account */}
+                <div style={{ marginTop: 24, padding: 16, borderRadius: 12, background: deleteHovered ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.2)', transition: 'background 0.2s' }}
+                  onMouseEnter={() => setDeleteHovered(true)}
+                  onMouseLeave={() => setDeleteHovered(false)}
+                >
                   <button onClick={() => setShowDeleteAccountConfirm(true)}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(248,113,113,0.25)', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 0, borderRadius: 0, background: 'transparent', border: 'none', cursor: 'pointer' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <Trash2 size={18} color="#f87171" />
@@ -551,24 +627,171 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
 
         <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 20 }} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-          <Field
-            label="First Name" placeholder="Juan"
-            value={editForm.firstname}
-            onChange={e => setEditForm(f => ({ ...f, firstname: e.target.value }))}
-            error={editErrors.firstname}
-            success={false}
-          />
-          <Field
-            label="Last Name" placeholder="Dela Cruz"
-            value={editForm.lastname}
-            onChange={e => setEditForm(f => ({ ...f, lastname: e.target.value }))}
-            success={false}
-          />
-        </div>
+        {/* ── Personal Information Section ── */}
         <div style={{ marginBottom: 24 }}>
-          <Field label="Email Address" value={profile.email} onChange={() => {}} type="email" disabled />
-          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#6b7280', marginTop: 6 }}>Email cannot be changed</p>
+          <h4 style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 12px', opacity: 0.8 }}>Personal Information</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <Field
+              label="First Name" placeholder="Juan"
+              value={editForm.firstname}
+              onChange={e => setEditForm(f => ({ ...f, firstname: e.target.value }))}
+              error={editErrors.firstname}
+              success={false}
+            />
+            <Field
+              label="Last Name" placeholder="Dela Cruz"
+              value={editForm.lastname}
+              onChange={e => setEditForm(f => ({ ...f, lastname: e.target.value }))}
+              success={false}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.88rem', color: '#c4c0dd', fontWeight: 500 }}>Gender <span style={{ color: '#ef4444' }}>*</span></label>
+              <select
+                value={editForm.gender}
+                onChange={e => setEditForm(f => ({ ...f, gender: e.target.value }))}
+                style={{
+                  width: '100%',
+                  background: '#1a1a2e',
+                  border: '1.5px solid rgba(255,255,255,0.1)',
+                  borderRadius: 10,
+                  padding: '13px 16px',
+                  color: editForm.gender ? 'white' : '#6b7280',
+                  fontFamily: "'DM Sans',sans-serif",
+                  fontSize: '0.92rem',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  transition: 'border-color 0.2s',
+                  cursor: 'pointer'
+                }}
+                onFocus={e => e.target.style.borderColor = 'rgba(168,85,247,0.6)'}
+                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+              >
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Non-Binary">Non-Binary</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.88rem', color: '#c4c0dd', fontWeight: 500 }}>Birthdate <span style={{ color: '#ef4444' }}>*</span></label>
+              <input
+                type="date"
+                value={editForm.birthdate || ''}
+                onChange={e => setEditForm(f => ({ ...f, birthdate: e.target.value }))}
+                disabled
+                style={{
+                  opacity: 0.5,
+                  cursor: 'not-allowed',
+                  width: '100%',
+                  background: '#1a1a2e',
+                  border: '1.5px solid rgba(255,255,255,0.1)',
+                  borderRadius: 10,
+                  padding: '13px 16px',
+                  color: 'white',
+                  fontFamily: "'DM Sans',sans-serif",
+                  fontSize: '0.92rem',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>Set at registration, cannot be changed</p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 20 }} />
+
+        {/* ── Contact Information Section ── */}
+        <div style={{ marginBottom: 24 }}>
+          <h4 style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 12px', opacity: 0.8 }}>Contact Information</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <Field
+              label="Phone" placeholder="09XX XXX XXXX"
+              value={editForm.phone}
+              onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+              success={false}
+            />
+            <Field label="Email Address" value={profile.email} onChange={() => {}} type="email" disabled />
+          </div>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#6b7280', margin: '6px 0 0' }}>Email cannot be changed</p>
+        </div>
+
+        <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 20 }} />
+
+        {/* ── Address Information Section ── */}
+        <div style={{ marginBottom: 24 }}>
+          <h4 style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 12px', opacity: 0.8 }}>Address Information</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, marginBottom: 16 }}>
+            <Field
+              label="Street/Barangay" placeholder="123 Main Street, Barangay Name"
+              value={editForm.street}
+              onChange={e => setEditForm(f => ({ ...f, street: e.target.value }))}
+              success={false}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <Field
+              label="Municipality/City" placeholder="Manila"
+              value={editForm.city}
+              onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))}
+              success={false}
+            />
+            <Field
+              label="State/Province" placeholder="Metro Manila"
+              value={editForm.state}
+              onChange={e => setEditForm(f => ({ ...f, state: e.target.value }))}
+              success={false}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Field
+              label="Country" placeholder="Philippines"
+              value={editForm.country}
+              onChange={e => setEditForm(f => ({ ...f, country: e.target.value }))}
+              success={false}
+            />
+            <Field
+              label="Zip Code" placeholder="1000"
+              value={editForm.zipcode}
+              onChange={e => setEditForm(f => ({ ...f, zipcode: e.target.value }))}
+              success={false}
+            />
+          </div>
+        </div>
+
+        <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 20 }} />
+
+        {/* ── Bio Section ── */}
+        <div style={{ marginBottom: 24 }}>
+          <h4 style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.82rem', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 12px', opacity: 0.8 }}>About You</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.88rem', color: '#c4c0dd', fontWeight: 500 }}>Bio</label>
+            <textarea
+              placeholder="Tell us a bit about yourself..."
+              value={editForm.bio}
+              onChange={e => setEditForm(f => ({ ...f, bio: e.target.value }))}
+              style={{
+                width: '100%',
+                background: '#1a1a2e',
+                border: '1.5px solid rgba(255,255,255,0.1)',
+                borderRadius: 10,
+                padding: '13px 16px',
+                color: 'white',
+                fontFamily: "'DM Sans',sans-serif",
+                fontSize: '0.92rem',
+                outline: 'none',
+                boxSizing: 'border-box',
+                transition: 'border-color 0.2s',
+                minHeight: 90,
+                resize: 'vertical',
+              }}
+              onFocus={e => e.target.style.borderColor = 'rgba(168,85,247,0.6)'}
+              onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+            />
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={handleSaveProfile} disabled={savingProfile}
@@ -627,14 +850,63 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
         </div>
       </Modal>
 
-      <Modal show={showDeleteAccountConfirm} onClose={() => setShowDeleteAccountConfirm(false)} title="Delete Account">
-        <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.7 }}>Account deletion is not available in this version yet. If you need help removing your account, please contact support.</p>
-        <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-          <button onClick={() => setShowDeleteAccountConfirm(false)}
-            style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
-            Okay
-          </button>
-        </div>
+      <Modal show={showDeleteAccountConfirm} onClose={() => { setShowDeleteAccountConfirm(false); setDeleteAccountStep(1); setDeleteConfirmText(''); }} title="Delete Account">
+        {deleteAccountStep === 1 ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16, padding: 16, borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              <AlertCircle size={20} color="#f87171" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.7, margin: '0 0 12px 0', fontWeight: 600 }}>
+                  This action cannot be undone. The following will be permanently deleted:
+                </p>
+                <ul style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.8, margin: 0, paddingLeft: 24 }}>
+                  <li>Your account and profile</li>
+                  <li>All HangOut events you hosted</li>
+                  <li>All your RSVPs and attendance records</li>
+                  <li>All messages you sent and received</li>
+                  <li>All notifications</li>
+                  <li>Your profile photo and uploads</li>
+                </ul>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+              <button onClick={() => { setDeleteAccountStep(2); setDeleteConfirmText(''); }}
+                style={{ flex: 1, padding: '13px', borderRadius: 12, background: '#ef4444', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                I understand, continue
+              </button>
+              <button onClick={() => { setShowDeleteAccountConfirm(false); setDeleteAccountStep(1); setDeleteConfirmText(''); }}
+                style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.7, marginBottom: 16 }}>
+              To confirm account deletion, type <strong>DELETE</strong> in the field below:
+            </p>
+            <div style={{ marginBottom: 24 }}>
+              <Field
+                label="Confirmation"
+                placeholder="Type DELETE"
+                value={deleteConfirmText}
+                onChange={e => setDeleteConfirmText(e.target.value.toUpperCase())}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={handleDeleteAccount}
+                disabled={deletingAccount || deleteConfirmText !== 'DELETE'}
+                style={{ flex: 1, padding: '13px', borderRadius: 12, background: deleteConfirmText === 'DELETE' ? '#dc2626' : '#991b1b', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: deleteConfirmText === 'DELETE' && !deletingAccount ? 'pointer' : 'not-allowed', opacity: deleteConfirmText === 'DELETE' ? 1 : 0.5 }}>
+                {deletingAccount ? 'Deleting...' : 'Delete My Account'}
+              </button>
+              <button onClick={() => { setDeleteAccountStep(1); setDeleteConfirmText(''); }}
+                disabled={deletingAccount}
+                style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                Back
+              </button>
+            </div>
+          </>
+        )}
       </Modal>
     </div>
   );

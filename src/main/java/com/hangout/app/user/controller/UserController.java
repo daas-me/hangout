@@ -73,4 +73,10 @@ public class UserController {
         userService.deletePhoto(extractEmail(authHeader));
         return ResponseEntity.ok(Map.of("message", "Photo removed"));
     }
+
+    @DeleteMapping("/account")
+    public ResponseEntity<?> deleteAccount(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+        userService.deleteAccount(extractEmail(authHeader));
+        return ResponseEntity.ok(Map.of("message", "Account deleted"));
+    }
 }

@@ -52,4 +52,9 @@ public interface MessageRepository extends JpaRepository<MessageEntity, Long> {
     """)
     void markAsRead(@Param("sender") UserEntity sender,
                     @Param("recipient") UserEntity recipient);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM MessageEntity m WHERE m.sender = :user OR m.recipient = :user")
+    void deleteAllInvolvingUser(@Param("user") UserEntity user);
 }

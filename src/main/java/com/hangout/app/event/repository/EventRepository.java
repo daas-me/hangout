@@ -23,6 +23,10 @@ import com.hangout.app.user.entity.UserEntity;
 
         // Count events hosted by a user
         long countByHost(UserEntity host);
+
+        // Count published (non-draft) events hosted by a user
+        @Query("SELECT COUNT(e) FROM EventEntity e WHERE e.host = :host AND (e.isDraft = false OR e.isDraft IS NULL)")
+        long countPublishedByHost(@Param("host") UserEntity host);
         
         // Find all published (non-draft) events sorted by date
         @Query("SELECT e FROM EventEntity e WHERE e.isDraft = false OR e.isDraft IS NULL ORDER BY e.date ASC, e.startTime ASC")

@@ -6,7 +6,7 @@ export function Modal({ isOpen, title, message, confirmText = 'Confirm', cancelT
 
   return (
     <div className={s.overlay} onClick={onCancel}>
-      <div className={s.modal} onClick={e => e.stopPropagation()}>
+      <div className={`${s.modal} custom-scrollbar`} onClick={e => e.stopPropagation()}>
         <div className={s.header}>
           <h2 className={s.title}>{title}</h2>
           <button className={s.closeBtn} onClick={onCancel} disabled={isLoading}>
