@@ -4,7 +4,7 @@ import {
   Camera, Calendar, Users, TrendingUp, ChevronRight,
   User, Settings, LogOut,
   Phone, MapPin, CheckCircle2,
-  Lock, Save, CheckCircle, AlertCircle, X, Trash2, Upload, Mail
+  Lock, Save, CheckCircle, AlertCircle, X, Trash2, Upload, Mail, Bell
 } from 'lucide-react';
 import { calculateAge } from '../../shared/utils/ageCalculator';
 import {
@@ -153,6 +153,26 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
 
+  // Notification preferences
+  const [showNotificationPrefs, setShowNotificationPrefs] = useState(false);
+  const [notificationPrefs, setNotificationPrefs] = useState({
+    notifNewRsvp: true,
+    notifPaymentProof: true,
+    notifRsvpCancelled: true,
+    notifRefundRequest: true,
+    notifRefundAcknowledged: true,
+    notifPaymentApproved: true,
+    notifPaymentRejected: true,
+    notifRsvpRejected: true,
+    notifRefundProcessed: true,
+    notifRefundCompleted: true,
+    notifEventCancelled: true,
+    notifEventDeleted: true,
+    notifSeatAssigned: true,
+  });
+  const [savingNotifPrefs, setSavingNotifPrefs] = useState(false);
+  const [notifPrefsMsg, setNotifPrefsMsg] = useState(null);
+
   const fileRef = useRef();
   const onUserUpdatedRef = useRef(onUserUpdated);
   const userRef = useRef(user);
@@ -196,6 +216,25 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
         });
         setCompletionPercent(data.completionPercent || 0);
         setProfileComplete(data.profileComplete || false);
+        
+        // Load notification preferences
+        const notifPrefs = {
+          notifNewRsvp: data.notifNewRsvp !== undefined ? data.notifNewRsvp : true,
+          notifPaymentProof: data.notifPaymentProof !== undefined ? data.notifPaymentProof : true,
+          notifRsvpCancelled: data.notifRsvpCancelled !== undefined ? data.notifRsvpCancelled : true,
+          notifRefundRequest: data.notifRefundRequest !== undefined ? data.notifRefundRequest : true,
+          notifRefundAcknowledged: data.notifRefundAcknowledged !== undefined ? data.notifRefundAcknowledged : true,
+          notifPaymentApproved: data.notifPaymentApproved !== undefined ? data.notifPaymentApproved : true,
+          notifPaymentRejected: data.notifPaymentRejected !== undefined ? data.notifPaymentRejected : true,
+          notifRsvpRejected: data.notifRsvpRejected !== undefined ? data.notifRsvpRejected : true,
+          notifRefundProcessed: data.notifRefundProcessed !== undefined ? data.notifRefundProcessed : true,
+          notifRefundCompleted: data.notifRefundCompleted !== undefined ? data.notifRefundCompleted : true,
+          notifEventCancelled: data.notifEventCancelled !== undefined ? data.notifEventCancelled : true,
+          notifEventDeleted: data.notifEventDeleted !== undefined ? data.notifEventDeleted : true,
+          notifSeatAssigned: data.notifSeatAssigned !== undefined ? data.notifSeatAssigned : true,
+        };
+        setNotificationPrefs(notifPrefs);
+        
         onUserUpdatedRef.current?.({ ...userRef.current, firstname: data.firstname, lastname: data.lastname });
       } catch (err) {
         console.error('Profile load failed:', err);
@@ -347,6 +386,25 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
       console.error('Delete account failed:', err);
       alert('Error: ' + (err.message || 'Failed to delete account'));
       setDeletingAccount(false);
+    }
+  };
+
+  const openNotificationPrefs = () => {
+    setNotifPrefsMsg(null);
+    setShowNotificationPrefs(true);
+  };
+
+  const handleSaveNotificationPrefs = async () => {
+    setSavingNotifPrefs(true);
+    setNotifPrefsMsg(null);
+    try {
+      await updateUserProfile(notificationPrefs);
+      setNotifPrefsMsg({ type: 'success', text: 'Notification preferences updated!' });
+      setTimeout(() => { setShowNotificationPrefs(false); setNotifPrefsMsg(null); }, 1200);
+    } catch (err) {
+      setNotifPrefsMsg({ type: 'error', text: err.message });
+    } finally {
+      setSavingNotifPrefs(false);
     }
   };
 
@@ -527,7 +585,7 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <SettingsBtn icon={User} label="Personal Information" sub="Update your details"       onClick={openEditProfile} />
                 <SettingsBtn icon={Lock} label="Privacy & Security"   sub="Change password & privacy" onClick={openChangePw} />
-                <SettingsBtn icon={Settings} label="Preferences" sub="Customize your experience" />
+                <SettingsBtn icon={Settings} label="Preferences" sub="Customize your experience" onClick={openNotificationPrefs} />
               </div>
 
               {/* Danger Actions */}
@@ -907,6 +965,52 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
             </div>
           </>
         )}
+      </Modal>
+
+      {/* ── Notification Preferences Modal ── */}
+      <Modal show={showNotificationPrefs} onClose={() => { setShowNotificationPrefs(false); setNotifPrefsMsg(null); }} title="Notification Preferences">
+        <Alert msg={notifPrefsMsg} />
+        <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.9rem', color: '#d1d5db', marginBottom: 16 }}>Control which types of notifications you'd like to receive.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 8, maxHeight: '60vh', overflowY: 'auto', paddingRight: 8 }}>
+          {[
+            { key: 'notifNewRsvp', label: 'New RSVP', desc: 'When someone RSVPs to your event' },
+            { key: 'notifPaymentProof', label: 'Payment Proof', desc: 'When attendee uploads payment' },
+            { key: 'notifRsvpCancelled', label: 'RSVP Cancelled', desc: 'When attendee cancels their RSVP' },
+            { key: 'notifRefundRequest', label: 'Refund Request', desc: 'When attendee requests refund' },
+            { key: 'notifRefundAcknowledged', label: 'Refund Acknowledged', desc: 'When attendee confirms refund' },
+            { key: 'notifPaymentApproved', label: 'Payment Approved', desc: 'Your payment was approved' },
+            { key: 'notifPaymentRejected', label: 'Payment Rejected', desc: 'Your payment was rejected' },
+            { key: 'notifRsvpRejected', label: 'RSVP Rejected', desc: 'Your RSVP was rejected' },
+            { key: 'notifRefundProcessed', label: 'Refund Processed', desc: 'Host processed your refund' },
+            { key: 'notifRefundCompleted', label: 'Refund Completed', desc: 'Refund flow is complete' },
+            { key: 'notifEventCancelled', label: 'Event Cancelled', desc: 'Event you RSVPd to cancelled' },
+            { key: 'notifEventDeleted', label: 'Event Deleted', desc: 'Event you RSVPd to deleted' },
+            { key: 'notifSeatAssigned', label: 'Seat Assigned', desc: 'Host assigned you a seat' },
+          ].map(item => (
+            <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.9rem', fontWeight: 600, color: '#e5e7eb', margin: 0 }}>{item.label}</p>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.8rem', color: '#9ca3af', margin: '4px 0 0' }}>{item.desc}</p>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', width: 48, height: 24 }}>
+                <input type="checkbox" checked={notificationPrefs[item.key]} onChange={e => setNotificationPrefs(prev => ({ ...prev, [item.key]: e.target.checked }))} style={{ display: 'none' }} />
+                <div style={{ width: '100%', height: '100%', borderRadius: 12, background: notificationPrefs[item.key] ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : 'rgba(255,255,255,0.1)', transition: 'background 0.3s', position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: 2, left: notificationPrefs[item.key] ? 26 : 2, width: 20, height: 20, borderRadius: 10, background: 'white', transition: 'left 0.3s' }} />
+                </div>
+              </label>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+          <button onClick={handleSaveNotificationPrefs} disabled={savingNotifPrefs}
+            style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'linear-gradient(135deg, #7c3aed, #a855f7)', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Bell size={16} />{savingNotifPrefs ? 'Saving...' : 'Save Preferences'}
+          </button>
+          <button onClick={() => { setShowNotificationPrefs(false); setNotifPrefsMsg(null); }}
+            style={{ padding: '13px 20px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
       </Modal>
     </div>
   );

@@ -114,6 +114,22 @@ public class UserService {
         profile.put("zipcode", user.getZipcode() != null ? user.getZipcode() : "");
         profile.put("completionPercent", completionPercent);
         profile.put("profileComplete", completionPercent == 100);
+
+        // Add notification preferences
+        profile.put("notifNewRsvp", user.getNotifNewRsvp() != null ? user.getNotifNewRsvp() : true);
+        profile.put("notifPaymentProof", user.getNotifPaymentProof() != null ? user.getNotifPaymentProof() : true);
+        profile.put("notifRsvpCancelled", user.getNotifRsvpCancelled() != null ? user.getNotifRsvpCancelled() : true);
+        profile.put("notifRefundRequest", user.getNotifRefundRequest() != null ? user.getNotifRefundRequest() : true);
+        profile.put("notifRefundAcknowledged", user.getNotifRefundAcknowledged() != null ? user.getNotifRefundAcknowledged() : true);
+        profile.put("notifPaymentApproved", user.getNotifPaymentApproved() != null ? user.getNotifPaymentApproved() : true);
+        profile.put("notifPaymentRejected", user.getNotifPaymentRejected() != null ? user.getNotifPaymentRejected() : true);
+        profile.put("notifRsvpRejected", user.getNotifRsvpRejected() != null ? user.getNotifRsvpRejected() : true);
+        profile.put("notifRefundProcessed", user.getNotifRefundProcessed() != null ? user.getNotifRefundProcessed() : true);
+        profile.put("notifRefundCompleted", user.getNotifRefundCompleted() != null ? user.getNotifRefundCompleted() : true);
+        profile.put("notifEventCancelled", user.getNotifEventCancelled() != null ? user.getNotifEventCancelled() : true);
+        profile.put("notifEventDeleted", user.getNotifEventDeleted() != null ? user.getNotifEventDeleted() : true);
+        profile.put("notifSeatAssigned", user.getNotifSeatAssigned() != null ? user.getNotifSeatAssigned() : true);
+
         return profile;
     }
 
@@ -147,6 +163,22 @@ public class UserService {
         if (body.containsKey("zipcode"))   user.setZipcode(body.get("zipcode"));
         if (body.containsKey("gender"))    user.setGender(body.get("gender"));
         if (body.containsKey("age"))       user.setAge(Integer.parseInt(body.get("age")));
+
+        // Handle notification preferences
+        if (body.containsKey("notifNewRsvp")) user.setNotifNewRsvp(Boolean.parseBoolean(body.get("notifNewRsvp")));
+        if (body.containsKey("notifPaymentProof")) user.setNotifPaymentProof(Boolean.parseBoolean(body.get("notifPaymentProof")));
+        if (body.containsKey("notifRsvpCancelled")) user.setNotifRsvpCancelled(Boolean.parseBoolean(body.get("notifRsvpCancelled")));
+        if (body.containsKey("notifRefundRequest")) user.setNotifRefundRequest(Boolean.parseBoolean(body.get("notifRefundRequest")));
+        if (body.containsKey("notifRefundAcknowledged")) user.setNotifRefundAcknowledged(Boolean.parseBoolean(body.get("notifRefundAcknowledged")));
+        if (body.containsKey("notifPaymentApproved")) user.setNotifPaymentApproved(Boolean.parseBoolean(body.get("notifPaymentApproved")));
+        if (body.containsKey("notifPaymentRejected")) user.setNotifPaymentRejected(Boolean.parseBoolean(body.get("notifPaymentRejected")));
+        if (body.containsKey("notifRsvpRejected")) user.setNotifRsvpRejected(Boolean.parseBoolean(body.get("notifRsvpRejected")));
+        if (body.containsKey("notifRefundProcessed")) user.setNotifRefundProcessed(Boolean.parseBoolean(body.get("notifRefundProcessed")));
+        if (body.containsKey("notifRefundCompleted")) user.setNotifRefundCompleted(Boolean.parseBoolean(body.get("notifRefundCompleted")));
+        if (body.containsKey("notifEventCancelled")) user.setNotifEventCancelled(Boolean.parseBoolean(body.get("notifEventCancelled")));
+        if (body.containsKey("notifEventDeleted")) user.setNotifEventDeleted(Boolean.parseBoolean(body.get("notifEventDeleted")));
+        if (body.containsKey("notifSeatAssigned")) user.setNotifSeatAssigned(Boolean.parseBoolean(body.get("notifSeatAssigned")));
+
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
     }
