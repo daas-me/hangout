@@ -25,6 +25,7 @@ public class NotificationService {
 
     /**
      * Creates and persists a notification.
+     * Checks user's notification preferences first — skips creation if disabled.
      * Safe to call from any service; logs errors so notification
      * failures can be debugged without breaking the main action.
      */
@@ -35,6 +36,13 @@ public class NotificationService {
                        Long referenceId,
                        String referenceType) {
         try {
+            // Check if user has enabled this notification type
+            if (!isNotificationTypeEnabled(user, type)) {
+                System.out.println("[NotificationService] ✓ Notification skipped (disabled): type=" + type + 
+                    ", recipient=" + user.getEmail());
+                return;
+            }
+
             NotificationEntity n = new NotificationEntity();
             n.setUser(user);
             n.setType(type);
@@ -51,6 +59,42 @@ public class NotificationService {
                 ", recipient=" + (user != null ? user.getEmail() : "null") + 
                 ", error=" + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Checks if a user has enabled a specific notification type.
+     */
+    private boolean isNotificationTypeEnabled(UserEntity user, String type) {
+        switch (type) {
+            case "NEW_RSVP":
+                return user.getNotifNewRsvp() != null && user.getNotifNewRsvp();
+            case "PAYMENT_PROOF":
+                return user.getNotifPaymentProof() != null && user.getNotifPaymentProof();
+            case "RSVP_CANCELLED":
+                return user.getNotifRsvpCancelled() != null && user.getNotifRsvpCancelled();
+            case "REFUND_REQUEST":
+                return user.getNotifRefundRequest() != null && user.getNotifRefundRequest();
+            case "REFUND_ACKNOWLEDGED":
+                return user.getNotifRefundAcknowledged() != null && user.getNotifRefundAcknowledged();
+            case "PAYMENT_APPROVED":
+                return user.getNotifPaymentApproved() != null && user.getNotifPaymentApproved();
+            case "PAYMENT_REJECTED":
+                return user.getNotifPaymentRejected() != null && user.getNotifPaymentRejected();
+            case "RSVP_REJECTED":
+                return user.getNotifRsvpRejected() != null && user.getNotifRsvpRejected();
+            case "REFUND_PROCESSED":
+                return user.getNotifRefundProcessed() != null && user.getNotifRefundProcessed();
+            case "REFUND_COMPLETED":
+                return user.getNotifRefundCompleted() != null && user.getNotifRefundCompleted();
+            case "EVENT_CANCELLED":
+                return user.getNotifEventCancelled() != null && user.getNotifEventCancelled();
+            case "EVENT_DELETED":
+                return user.getNotifEventDeleted() != null && user.getNotifEventDeleted();
+            case "SEAT_ASSIGNED":
+                return user.getNotifSeatAssigned() != null && user.getNotifSeatAssigned();
+            default:
+                return true; // Unknown types are allowed
         }
     }
 
