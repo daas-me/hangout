@@ -7,10 +7,19 @@ import { getUnreadNotificationCount } from '../../features/notifications/notific
 export function Navbar({ user, onLogout, onNavigate, activePage }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
   const pollRef = useRef(null);
 
   const initials = user?.firstname?.[0]?.toUpperCase() ?? '?';
   const fullName = user?.firstname ?? '';
+
+  const handleCreateClick = () => {
+    if (!user?.profileComplete) {
+      setShowUnlockModal(true);
+    } else {
+      onNavigate?.('create');
+    }
+  };
 
   const fetchUnread = useCallback(async () => {
     if (!user?.id) return;
@@ -69,10 +78,17 @@ export function Navbar({ user, onLogout, onNavigate, activePage }) {
           {/* Create Event */}
           <button
             className={styles.createBtn}
-            onClick={() => onNavigate?.('create')}
+            onClick={handleCreateClick}
+            style={!user?.profileComplete ? {
+              opacity: 0.6,
+              cursor: 'pointer',
+              background: '#6b7280',
+              pointerEvents: 'auto'
+            } : {}}
+            title={!user?.profileComplete ? 'Complete your profile to create events' : 'Create a new HangOut'}
           >
             <Plus className={styles.createIcon} />
-            Create HangOut
+            {!user?.profileComplete ? 'Unlock Hosting' : 'Create HangOut'}
           </button>
 
           {/* Bell */}
@@ -130,6 +146,29 @@ export function Navbar({ user, onLogout, onNavigate, activePage }) {
         onClose={handleClose}
         onUnreadCountChange={handleUnreadChange}
       />
+
+      {/* Unlock Hosting Modal */}
+      {showUnlockModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="custom-scrollbar" style={{ background: 'rgba(30, 32, 60, 0.5)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, width: '100%', maxWidth: 400, padding: 32, position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
+            <button onClick={() => setShowUnlockModal(false)} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#9ca3af', cursor: 'pointer', padding: '6px', display: 'flex', width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
+              ✕
+            </button>
+            <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.3rem', fontWeight: 700, color: 'white', margin: '0 0 16px' }}>Unlock Hosting</h3>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", color: '#d1d5db', lineHeight: 1.6, margin: '0 0 24px' }}>
+              Complete your profile to start creating HangOuts. Fill in your phone number, city, and bio.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setShowUnlockModal(false); onNavigate?.('profile'); }} style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'linear-gradient(135deg, #7c3aed, #a855f7)', border: 'none', color: 'white', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                Complete Profile
+              </button>
+              <button onClick={() => setShowUnlockModal(false)} style={{ flex: 1, padding: '13px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontFamily: "'Syne',sans-serif", fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

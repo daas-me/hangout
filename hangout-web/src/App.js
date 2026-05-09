@@ -64,9 +64,9 @@ export default function App() {
     setHostedEvents([]);
     setEditingEvent(null);
     setSelectedEvent(null);
-    // Reload the entire app to ensure clean state
-    window.location.reload();
-  }, [clearSessionTimers]);
+    // Navigate to root which will redirect to login since user is now null
+    navigate("/", { replace: true });
+  }, [clearSessionTimers, navigate]);
 
   const scheduleIdleLogout = useCallback(() => {
     window.clearTimeout(idleTimer.current);
@@ -128,6 +128,8 @@ export default function App() {
             ...profile,
             photoUrl: photo?.photo || null,
             photo: photo?.photo || null,
+            profileComplete: profile.profileComplete || false,
+            completionPercent: profile.completionPercent || 0,
           };
           setUser(mergedUser);
           saveUser(mergedUser);
@@ -165,6 +167,8 @@ export default function App() {
           ...profile,
           photoUrl: photo?.photo || null,
           photo: photo?.photo || null,
+          profileComplete: profile.profileComplete || false,
+          completionPercent: profile.completionPercent || 0,
         };
         setUser(mergedUser);
         saveUser(mergedUser);

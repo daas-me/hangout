@@ -33,6 +33,30 @@ public class UserEntity {
     @Column(columnDefinition = "BYTEA")
     private byte[] photo;
 
+    @Column(name = "phone")
+    private String phone;
+
+    @Column(name = "city")
+    private String city;
+
+    @Column(name = "bio", columnDefinition = "TEXT")
+    private String bio;
+
+    @Column(name = "street")
+    private String street;
+
+    @Column(name = "state")
+    private String state;
+
+    @Column(name = "country")
+    private String country;
+
+    @Column(name = "zipcode")
+    private String zipcode;
+
+    @Column(name = "gender")
+    private String gender;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -58,6 +82,22 @@ public class UserEntity {
     public void setRole(String role) { this.role = role; }
     public byte[] getPhoto() { return photo; }
     public void setPhoto(byte[] photo) { this.photo = photo; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+    public String getBio() { return bio; }
+    public void setBio(String bio) { this.bio = bio; }
+    public String getStreet() { return street; }
+    public void setStreet(String street) { this.street = street; }
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+    public String getCountry() { return country; }
+    public void setCountry(String country) { this.country = country; }
+    public String getZipcode() { return zipcode; }
+    public void setZipcode(String zipcode) { this.zipcode = zipcode; }
+    public String getGender() { return gender; }
+    public void setGender(String gender) { this.gender = gender; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }

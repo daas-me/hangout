@@ -48,6 +48,25 @@ public class EventService {
     public Map<String, Object> createEvent(String email, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
 
+        // Check profile completeness before allowing event creation
+        int filled = 0;
+        if (user.getFirstname() != null && !user.getFirstname().isBlank()) filled++;
+        if (user.getLastname()  != null && !user.getLastname().isBlank())  filled++;
+        if (user.getPhone()     != null && !user.getPhone().isBlank())     filled++;
+        if (user.getCity()      != null && !user.getCity().isBlank())      filled++;
+        if (user.getBio()       != null && !user.getBio().isBlank())       filled++;
+        if (user.getStreet()    != null && !user.getStreet().isBlank())    filled++;
+        if (user.getState()     != null && !user.getState().isBlank())     filled++;
+        if (user.getCountry()   != null && !user.getCountry().isBlank())   filled++;
+        if (user.getZipcode()   != null && !user.getZipcode().isBlank())   filled++;
+        if (user.getGender()    != null && !user.getGender().isBlank())    filled++;
+        if (user.getBirthdate() != null)                                    filled++;
+
+        if (filled < 11) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Complete your profile before creating a HangOut.");
+        }
+
         String title   = (String) body.get("title");
         String dateStr = (String) body.get("date");
 

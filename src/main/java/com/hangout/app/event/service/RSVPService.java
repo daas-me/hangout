@@ -877,6 +877,17 @@ public class RSVPService {
         map.put("attendeeStatus", rsvp.getAttendeeStatus());
         map.put("attendeeRejectionReason", rsvp.getAttendeeRejectionReason());
         map.put("attendeeRejectionType", rsvp.getAttendeeRejectionType());
+        
+        // Profile information for attendee profile widget
+        map.put("gender",        rsvp.getUser().getGender() != null ? rsvp.getUser().getGender() : null);
+        map.put("birthdate",     rsvp.getUser().getBirthdate() != null ? rsvp.getUser().getBirthdate().toString() : null);
+        map.put("phone",         rsvp.getUser().getPhone() != null ? rsvp.getUser().getPhone() : null);
+        map.put("city",          rsvp.getUser().getCity() != null ? rsvp.getUser().getCity() : null);
+        map.put("state",         rsvp.getUser().getState() != null ? rsvp.getUser().getState() : null);
+        map.put("country",       rsvp.getUser().getCountry() != null ? rsvp.getUser().getCountry() : null);
+        map.put("zipcode",       rsvp.getUser().getZipcode() != null ? rsvp.getUser().getZipcode() : null);
+        map.put("bio",           rsvp.getUser().getBio() != null ? rsvp.getUser().getBio() : null);
+        
         return map;
     }
 

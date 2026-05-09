@@ -4,7 +4,7 @@ import { Modal } from '../../shared/components/Modal';
 import {
   Search, Calendar, MapPin, Users, PhilippinePeso,
   Eye, Edit, Trash2, Heart, Tent, CalendarOff, Star,
-  Upload, Clock
+  Upload, Clock, Lock
 } from 'lucide-react';
 import { getHostingEvents, deleteEvent, getAttendingEvents } from '../home/homeApi';
 import { publishEvent } from '../events/eventsApi';
@@ -287,77 +287,154 @@ export default function MyHangoutsPage({ user, onLogout, onNavigate, hostedEvent
         </div>
 
         {tab === 'hosting' && (
-          <div className={s.filterBar}>
-            {hostingFilters.map(filter => (
-              <button
-                key={filter.key}
-                type="button"
-                className={hostingFilter === filter.key ? s.filterBtnActive : s.filterBtn}
-                onClick={() => setHostingFilter(filter.key)}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className={s.filterBar}>
+              {hostingFilters.map(filter => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  className={hostingFilter === filter.key ? s.filterBtnActive : s.filterBtn}
+                  onClick={() => setHostingFilter(filter.key)}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            {!user?.profileComplete && (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(168, 85, 247, 0.1))',
+                border: '1px solid rgba(124, 58, 237, 0.3)',
+                borderRadius: 12,
+                padding: 24,
+                marginBottom: 24,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16
+              }}>
+                <Lock size={32} color="#a855f7" />
+                <div style={{ flex: 1 }}>
+                  <h3 style={{
+                    fontFamily: "'Syne',sans-serif",
+                    fontSize: '1.25rem',
+                    fontWeight: 700,
+                    color: 'white',
+                    margin: '0 0 8px'
+                  }}>
+                    Unlock Hosting
+                  </h3>
+                  <p style={{
+                    fontFamily: "'DM Sans',sans-serif",
+                    color: '#d1d5db',
+                    margin: '0 0 16px',
+                    lineHeight: 1.5
+                  }}>
+                    Fill in your phone, city, and bio to start creating HangOuts.
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ flex: 1, maxWidth: 200 }}>
+                      <div style={{
+                        width: '100%',
+                        height: 8,
+                        background: 'rgba(255,255,255,0.1)',
+                        borderRadius: 4,
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          width: `${user?.completionPercent || 0}%`,
+                          height: '100%',
+                          background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
+                          borderRadius: 4,
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                      <p style={{
+                        fontSize: '0.875rem',
+                        color: '#9ca3af',
+                        margin: '4px 0 0',
+                        textAlign: 'center'
+                      }}>
+                        {user?.completionPercent || 0}% Complete
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => onNavigate?.('profile')}
+                      style={{
+                        padding: '10px 16px',
+                        borderRadius: 8,
+                        background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                        border: 'none',
+                        color: 'white',
+                        fontFamily: "'Syne',sans-serif",
+                        fontSize: '0.875rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Complete Profile
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className={s.list}>
+              {loading ? (
+                <><CardSkeleton /><CardSkeleton /></>
+              ) : filteredHosting.length === 0 ? (
+                <EmptyState tab="hosting" onNavigate={onNavigate} />
+              ) : (
+                filteredHosting.map(event => (
+                  <HostingCard
+                    key={event.id}
+                    event={event}
+                    onDelete={handleDelete}
+                    onEdit={() => onEditEvent?.(event)}
+                    onView={() => setManagingEvent(event)}
+                    onOpenEvent={() => onViewEvent(event)}
+                    onPublish={handlePublish}
+                    onRefresh={fetchHostingEvents}
+                  />
+                ))
+              )}
+            </div>
+          </>
         )}
 
         {tab === 'attending' && (
-          <div className={s.filterBar}>
-            {attendingFilters.map(filter => (
-              <button
-                key={filter.key}
-                type="button"
-                className={attendingFilter === filter.key ? s.filterBtnActive : s.filterBtn}
-                onClick={() => setAttendingFilter(filter.key)}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-        )}
+          <>
+            <div className={s.filterBar}>
+              {attendingFilters.map(filter => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  className={attendingFilter === filter.key ? s.filterBtnActive : s.filterBtn}
+                  onClick={() => setAttendingFilter(filter.key)}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
 
-        {tab === 'hosting' && (
-          <div className={s.list}>
-            {loading ? (
-              <><CardSkeleton /><CardSkeleton /></>
-            ) : filteredHosting.length === 0 ? (
-              <EmptyState tab="hosting" onNavigate={onNavigate} />
-            ) : (
-              filteredHosting.map(event => (
-                <HostingCard
-                  key={event.id}
-                  event={event}
-                  onDelete={handleDelete}
-                  onEdit={() => onEditEvent?.(event)}
-                  onView={() => setManagingEvent(event)}
-                  onOpenEvent={() => onViewEvent(event)}
-                  onPublish={handlePublish}
-                  onRefresh={fetchHostingEvents}
-                />
-              ))
-            )}
-          </div>
-        )}
-
-        {tab === 'attending' && (
-          <div className={s.list}>
-            {loading ? (
-              <><CardSkeleton /><CardSkeleton /></>
-            ) : filteredAttending.length === 0 ? (
-              <EmptyState tab="attending" onNavigate={onNavigate} />
-            ) : (
-              filteredAttending.map(event => (
-                <AttendingCard 
-                  key={event.id} 
-                  event={event}
-                  currentUser={user} 
-                  onViewDetails={() => setViewingAttendingEvent(event)}
-                  onOpenEvent={() => onViewEvent(event)}
-                  onEventCancelled={() => fetchAttendingEvents()}
-                />
-              ))
-            )}
-          </div>
+            <div className={s.list}>
+              {loading ? (
+                <><CardSkeleton /><CardSkeleton /></>
+              ) : filteredAttending.length === 0 ? (
+                <EmptyState tab="attending" onNavigate={onNavigate} />
+              ) : (
+                filteredAttending.map(event => (
+                  <AttendingCard 
+                    key={event.id} 
+                    event={event}
+                    currentUser={user} 
+                    onViewDetails={() => setViewingAttendingEvent(event)}
+                    onOpenEvent={() => onViewEvent(event)}
+                    onEventCancelled={() => fetchAttendingEvents()}
+                  />
+                ))
+              )}
+            </div>
+          </>
         )}
 
         {tab === 'favorites' && (

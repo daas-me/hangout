@@ -146,3 +146,52 @@ export async function changeUserPassword(payload) {
   if (!res.ok) throw new Error(data.message || 'Failed to update password');
   return data;
 }
+
+export async function deleteUserAccount() {
+  const res = await fetch(`${API_BASE}/user/account`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || 'Failed to delete account');
+  }
+  clearProfileCache();
+  return res.json();
+}
+
+/**
+ * Fetch a public user's profile by ID
+ * GET /api/users/{userId}/profile
+ */
+export async function getPublicUserProfile(userId) {
+  try {
+    const res = await fetch(`${API_BASE}/users/${userId}/profile`, {
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to load user profile');
+    return data;
+  } catch (err) {
+    console.error(`Failed to fetch user profile for ${userId}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch the number of hangouts hosted by a user
+ * GET /api/users/{userId}/hosting-count
+ */
+export async function getUserHostingCount(userId) {
+  try {
+    const res = await fetch(`${API_BASE}/users/${userId}/hosting-count`, {
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(typeof data === 'string' ? data : 'Failed to load hosting count');
+    return typeof data === 'number' ? data : (data.count || 0);
+  } catch (err) {
+    console.error(`Failed to fetch hosting count for ${userId}:`, err);
+    return 0;
+  }
+}
