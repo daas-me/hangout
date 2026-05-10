@@ -7,6 +7,8 @@ import com.hangout.app.notification.service.NotificationService;
 import com.hangout.app.user.entity.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -45,6 +47,7 @@ public class EventService {
 
     // ── Create ────────────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "userHostedEvents", key = "#email", beforeInvocation = false)
     public Map<String, Object> createEvent(String email, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
 
@@ -107,6 +110,7 @@ public class EventService {
 
     // ── Update ────────────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "userHostedEvents", key = "#email", beforeInvocation = false)
     public Map<String, Object> updateEvent(String email, Long id, Map<String, Object> body) {
         UserEntity  user  = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(id);
@@ -160,6 +164,7 @@ public class EventService {
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "userHostedEvents", key = "#email", beforeInvocation = false)
     public void deleteEvent(String email, Long id) {
         UserEntity  user  = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(id);
@@ -187,6 +192,7 @@ public class EventService {
 
     // ── Cancel Event (Host cancels an upcoming event) ────────────────────────
 
+    @CacheEvict(value = "userHostedEvents", key = "#email", beforeInvocation = false)
     public Map<String, Object> cancelEvent(String email, Long id, String reason) {
         UserEntity  user  = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(id);
@@ -217,6 +223,7 @@ public class EventService {
 
     // ── Publish/Unpublish ─────────────────────────────────────────────────────
 
+    @CacheEvict(value = "userHostedEvents", key = "#email", beforeInvocation = false)
     public Map<String, Object> publishEvent(String email, Long id) {
         UserEntity  user  = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(id);
@@ -236,6 +243,7 @@ public class EventService {
         return toResponse(eventRepository.save(event));
     }
 
+    @CacheEvict(value = "userHostedEvents", key = "#email", beforeInvocation = false)
     public Map<String, Object> unpublishEvent(String email, Long id) {
         UserEntity  user  = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(id);
@@ -316,6 +324,7 @@ public class EventService {
         return response;
     }
 
+    @Cacheable(value = "userHostedEvents", key = "#email")
     public List<Map<String, Object>> getHostingEvents(String email) {
         UserEntity user = findUserOrThrow(email);
         return eventRepository
@@ -331,6 +340,7 @@ public class EventService {
             .map(this::toResponse).collect(Collectors.toList());
     }
 
+    @Cacheable(value = "todayEvents", key = "'todayEvents'")
     public List<Map<String, Object>> getTodayEvents(String email) {
         findUserOrThrow(email); // auth check
         // Use database query instead of findByDate which may load draft events

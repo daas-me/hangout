@@ -19,6 +19,7 @@ export const TYPE_META = {
   EVENT_DELETED:       { icon: Trash2,         accent: '#6b7280' },
   SEAT_ASSIGNED:       { icon: Armchair,       accent: '#3b82f6' },
   NEW_MESSAGE:         { icon: MessageCircle,  accent: '#ec4899' },
+  EVENT_REMINDER:      { icon: Bell,           accent: '#f59e0b' },
 };
 
 export const meta = (type) => TYPE_META[type] ?? { icon: Bell, accent: '#a855f7' };

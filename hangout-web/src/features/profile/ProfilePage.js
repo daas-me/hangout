@@ -169,6 +169,7 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
     notifEventCancelled: true,
     notifEventDeleted: true,
     notifSeatAssigned: true,
+    notifEventReminder: true,
   });
   const [savingNotifPrefs, setSavingNotifPrefs] = useState(false);
   const [notifPrefsMsg, setNotifPrefsMsg] = useState(null);
@@ -232,6 +233,7 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
           notifEventCancelled: data.notifEventCancelled !== undefined ? data.notifEventCancelled : true,
           notifEventDeleted: data.notifEventDeleted !== undefined ? data.notifEventDeleted : true,
           notifSeatAssigned: data.notifSeatAssigned !== undefined ? data.notifSeatAssigned : true,
+          notifEventReminder: data.notifEventReminder !== undefined ? data.notifEventReminder : true,
         };
         setNotificationPrefs(notifPrefs);
         
@@ -971,35 +973,100 @@ export default function ProfilePage({ user, onLogout, onNavigate, onUserUpdated 
       <Modal show={showNotificationPrefs} onClose={() => { setShowNotificationPrefs(false); setNotifPrefsMsg(null); }} title="Notification Preferences">
         <Alert msg={notifPrefsMsg} />
         <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.9rem', color: '#d1d5db', marginBottom: 16 }}>Control which types of notifications you'd like to receive.</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 8, maxHeight: '60vh', overflowY: 'auto', paddingRight: 8 }}>
-          {[
-            { key: 'notifNewRsvp', label: 'New RSVP', desc: 'When someone RSVPs to your event' },
-            { key: 'notifPaymentProof', label: 'Payment Proof', desc: 'When attendee uploads payment' },
-            { key: 'notifRsvpCancelled', label: 'RSVP Cancelled', desc: 'When attendee cancels their RSVP' },
-            { key: 'notifRefundRequest', label: 'Refund Request', desc: 'When attendee requests refund' },
-            { key: 'notifRefundAcknowledged', label: 'Refund Acknowledged', desc: 'When attendee confirms refund' },
-            { key: 'notifPaymentApproved', label: 'Payment Approved', desc: 'Your payment was approved' },
-            { key: 'notifPaymentRejected', label: 'Payment Rejected', desc: 'Your payment was rejected' },
-            { key: 'notifRsvpRejected', label: 'RSVP Rejected', desc: 'Your RSVP was rejected' },
-            { key: 'notifRefundProcessed', label: 'Refund Processed', desc: 'Host processed your refund' },
-            { key: 'notifRefundCompleted', label: 'Refund Completed', desc: 'Refund flow is complete' },
-            { key: 'notifEventCancelled', label: 'Event Cancelled', desc: 'Event you RSVPd to cancelled' },
-            { key: 'notifEventDeleted', label: 'Event Deleted', desc: 'Event you RSVPd to deleted' },
-            { key: 'notifSeatAssigned', label: 'Seat Assigned', desc: 'Host assigned you a seat' },
-          ].map(item => (
-            <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <div>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.9rem', fontWeight: 600, color: '#e5e7eb', margin: 0 }}>{item.label}</p>
-                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.8rem', color: '#9ca3af', margin: '4px 0 0' }}>{item.desc}</p>
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', width: 48, height: 24 }}>
-                <input type="checkbox" checked={notificationPrefs[item.key]} onChange={e => setNotificationPrefs(prev => ({ ...prev, [item.key]: e.target.checked }))} style={{ display: 'none' }} />
-                <div style={{ width: '100%', height: '100%', borderRadius: 12, background: notificationPrefs[item.key] ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : 'rgba(255,255,255,0.1)', transition: 'background 0.3s', position: 'relative' }}>
-                  <div style={{ position: 'absolute', top: 2, left: notificationPrefs[item.key] ? 26 : 2, width: 20, height: 20, borderRadius: 10, background: 'white', transition: 'left 0.3s' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 8, maxHeight: '60vh', overflowY: 'auto', paddingRight: 8 }}>
+          {/* RSVP & Attendance Category */}
+          <div>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px', opacity: 0.8 }}>RSVP & Attendance</p>
+            {[
+              { key: 'notifNewRsvp', label: 'New RSVP', desc: 'When someone RSVPs to your event' },
+              { key: 'notifRsvpCancelled', label: 'RSVP Cancelled', desc: 'When attendee cancels their RSVP' },
+              { key: 'notifRsvpRejected', label: 'RSVP Rejected', desc: 'Your RSVP was rejected' },
+              { key: 'notifSeatAssigned', label: 'Seat Assigned', desc: 'Host assigned you a seat' },
+            ].map(item => (
+              <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', marginBottom: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.9rem', fontWeight: 600, color: '#e5e7eb', margin: 0 }}>{item.label}</p>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.8rem', color: '#9ca3af', margin: '4px 0 0' }}>{item.desc}</p>
                 </div>
-              </label>
-            </div>
-          ))}
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', width: 48, height: 24 }}>
+                  <input type="checkbox" checked={notificationPrefs[item.key]} onChange={e => setNotificationPrefs(prev => ({ ...prev, [item.key]: e.target.checked }))} style={{ display: 'none' }} />
+                  <div style={{ width: '100%', height: '100%', borderRadius: 12, background: notificationPrefs[item.key] ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : 'rgba(255,255,255,0.1)', transition: 'background 0.3s', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 2, left: notificationPrefs[item.key] ? 26 : 2, width: 20, height: 20, borderRadius: 10, background: 'white', transition: 'left 0.3s' }} />
+                  </div>
+                </label>
+              </div>
+            ))}
+          </div>
+
+          {/* Payments Category */}
+          <div>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px', opacity: 0.8 }}>Payments</p>
+            {[
+              { key: 'notifPaymentProof', label: 'Payment Proof', desc: 'When attendee uploads payment' },
+              { key: 'notifPaymentApproved', label: 'Payment Approved', desc: 'Your payment was approved' },
+              { key: 'notifPaymentRejected', label: 'Payment Rejected', desc: 'Your payment was rejected' },
+            ].map(item => (
+              <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', marginBottom: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.9rem', fontWeight: 600, color: '#e5e7eb', margin: 0 }}>{item.label}</p>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.8rem', color: '#9ca3af', margin: '4px 0 0' }}>{item.desc}</p>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', width: 48, height: 24 }}>
+                  <input type="checkbox" checked={notificationPrefs[item.key]} onChange={e => setNotificationPrefs(prev => ({ ...prev, [item.key]: e.target.checked }))} style={{ display: 'none' }} />
+                  <div style={{ width: '100%', height: '100%', borderRadius: 12, background: notificationPrefs[item.key] ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : 'rgba(255,255,255,0.1)', transition: 'background 0.3s', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 2, left: notificationPrefs[item.key] ? 26 : 2, width: 20, height: 20, borderRadius: 10, background: 'white', transition: 'left 0.3s' }} />
+                  </div>
+                </label>
+              </div>
+            ))}
+          </div>
+
+          {/* Refunds Category */}
+          <div>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px', opacity: 0.8 }}>Refunds</p>
+            {[
+              { key: 'notifRefundRequest', label: 'Refund Request', desc: 'When attendee requests refund' },
+              { key: 'notifRefundAcknowledged', label: 'Refund Acknowledged', desc: 'When attendee confirms refund' },
+              { key: 'notifRefundProcessed', label: 'Refund Processed', desc: 'Host processed your refund' },
+              { key: 'notifRefundCompleted', label: 'Refund Completed', desc: 'Refund flow is complete' },
+            ].map(item => (
+              <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', marginBottom: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.9rem', fontWeight: 600, color: '#e5e7eb', margin: 0 }}>{item.label}</p>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.8rem', color: '#9ca3af', margin: '4px 0 0' }}>{item.desc}</p>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', width: 48, height: 24 }}>
+                  <input type="checkbox" checked={notificationPrefs[item.key]} onChange={e => setNotificationPrefs(prev => ({ ...prev, [item.key]: e.target.checked }))} style={{ display: 'none' }} />
+                  <div style={{ width: '100%', height: '100%', borderRadius: 12, background: notificationPrefs[item.key] ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : 'rgba(255,255,255,0.1)', transition: 'background 0.3s', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 2, left: notificationPrefs[item.key] ? 26 : 2, width: 20, height: 20, borderRadius: 10, background: 'white', transition: 'left 0.3s' }} />
+                  </div>
+                </label>
+              </div>
+            ))}
+          </div>
+
+          {/* Events Category */}
+          <div>
+            <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', color: '#a855f7', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px', opacity: 0.8 }}>Events</p>
+            {[
+              { key: 'notifEventReminder', label: 'Event Reminders', desc: 'Reminders before events you\'re attending' },
+              { key: 'notifEventCancelled', label: 'Event Cancelled', desc: 'Event you RSVPd to cancelled' },
+              { key: 'notifEventDeleted', label: 'Event Deleted', desc: 'Event you RSVPd to deleted' },
+            ].map(item => (
+              <div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', marginBottom: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.9rem', fontWeight: 600, color: '#e5e7eb', margin: 0 }}>{item.label}</p>
+                  <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.8rem', color: '#9ca3af', margin: '4px 0 0' }}>{item.desc}</p>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative', width: 48, height: 24 }}>
+                  <input type="checkbox" checked={notificationPrefs[item.key]} onChange={e => setNotificationPrefs(prev => ({ ...prev, [item.key]: e.target.checked }))} style={{ display: 'none' }} />
+                  <div style={{ width: '100%', height: '100%', borderRadius: 12, background: notificationPrefs[item.key] ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : 'rgba(255,255,255,0.1)', transition: 'background 0.3s', position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 2, left: notificationPrefs[item.key] ? 26 : 2, width: 20, height: 20, borderRadius: 10, background: 'white', transition: 'left 0.3s' }} />
+                  </div>
+                </label>
+              </div>
+            ))}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           <button onClick={handleSaveNotificationPrefs} disabled={savingNotifPrefs}

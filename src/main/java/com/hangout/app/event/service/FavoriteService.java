@@ -8,6 +8,8 @@ import com.hangout.app.event.repository.RSVPRepository;
 import com.hangout.app.user.entity.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -65,6 +67,7 @@ public class FavoriteService {
 
     // ── Add Favorite ────────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "userFavorites", key = "#email", beforeInvocation = false)
     public Map<String, Object> addFavorite(String email, Long eventId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -94,6 +97,7 @@ public class FavoriteService {
     }
 
     // ── Remove Favorite ────────────────────────────────────────────────────────
+    @CacheEvict(value = "userFavorites", key = "#email", beforeInvocation = false)
     @Transactional
     public Map<String, Object> removeFavorite(String email, Long eventId) {
         UserEntity user = findUserOrThrow(email);
@@ -114,6 +118,7 @@ public class FavoriteService {
     // ── Get User Favorites ─────────────────────────────────────────────────────
     @Autowired private RSVPRepository rsvpRepository;
 
+    @Cacheable(value = "userFavorites", key = "#email")
     public List<Map<String, Object>> getUserFavorites(String email) {
         UserEntity user = findUserOrThrow(email);
         List<FavoriteEntity> favorites = favoriteRepository.findByUser(user);
@@ -130,6 +135,7 @@ public class FavoriteService {
 
     // ── Check if Event is Favorited ────────────────────────────────────────────
 
+    @Cacheable(value = "isFavorite", key = "#email + ':' + #eventId")
     public Map<String, Object> checkIsFavorite(String email, Long eventId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
