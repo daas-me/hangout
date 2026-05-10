@@ -114,7 +114,19 @@ public class EventController {
 
     @GetMapping("/attending")
     public ResponseEntity<?> getAttendingEvents() {
-        return ResponseEntity.ok(rsvpService.getAttendingEvents(getAuthenticatedEmail()));
+        String email = null;
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !(auth instanceof AnonymousAuthenticationToken)) {
+                String principal = auth.getName();
+                if (principal != null && !"anonymousUser".equals(principal)) {
+                    email = principal;
+                }
+            }
+        } catch (Exception e) {
+            // Silently fail - user is unauthenticated
+        }
+        return ResponseEntity.ok(rsvpService.getAttendingEvents(email));
     }
 
     @GetMapping("/today")
@@ -175,7 +187,19 @@ public class EventController {
 
     @GetMapping("/{id}/rsvp/check")
     public ResponseEntity<?> checkRSVPStatus(@PathVariable Long id) {
-        return ResponseEntity.ok(rsvpService.checkRSVPStatus(getAuthenticatedEmail(), id));
+        String email = null;
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !(auth instanceof AnonymousAuthenticationToken)) {
+                String principal = auth.getName();
+                if (principal != null && !"anonymousUser".equals(principal)) {
+                    email = principal;
+                }
+            }
+        } catch (Exception e) {
+            // Silently fail - user is unauthenticated
+        }
+        return ResponseEntity.ok(rsvpService.checkRSVPStatus(email, id));
     }
 
     @GetMapping("/{id}/attendees")

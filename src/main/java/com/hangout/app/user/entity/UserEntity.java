@@ -97,6 +97,9 @@ public class UserEntity {
     @Column(name = "notif_seat_assigned", columnDefinition = "BOOLEAN DEFAULT true")
     private Boolean notifSeatAssigned = true;
 
+    @Column(name = "notif_event_reminder", columnDefinition = "BOOLEAN DEFAULT true")
+    private Boolean notifEventReminder = true;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -181,4 +184,7 @@ public class UserEntity {
 
     public Boolean getNotifSeatAssigned() { return notifSeatAssigned; }
     public void setNotifSeatAssigned(Boolean notifSeatAssigned) { this.notifSeatAssigned = notifSeatAssigned; }
+
+    public Boolean getNotifEventReminder() { return notifEventReminder; }
+    public void setNotifEventReminder(Boolean notifEventReminder) { this.notifEventReminder = notifEventReminder; }
 }

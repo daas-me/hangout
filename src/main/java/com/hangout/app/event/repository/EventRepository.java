@@ -3,6 +3,8 @@
     import com.hangout.app.event.entity.EventEntity;
 import com.hangout.app.user.entity.UserEntity;
 
+    import org.springframework.data.domain.Page;
+    import org.springframework.data.domain.Pageable;
     import org.springframework.data.jpa.repository.JpaRepository;
     import org.springframework.data.jpa.repository.Query;
     import org.springframework.data.repository.query.Param;
@@ -39,4 +41,14 @@ import com.hangout.app.user.entity.UserEntity;
         // Find published events today
         @Query("SELECT e FROM EventEntity e WHERE (e.isDraft = false OR e.isDraft IS NULL) AND e.date = :date ORDER BY e.startTime ASC")
         List<EventEntity> findPublishedEventsByDate(@Param("date") LocalDate date);
+        
+        // Paginated versions for better performance on large datasets
+        @Query("SELECT e FROM EventEntity e LEFT JOIN FETCH e.host h WHERE h = :host ORDER BY e.date ASC, e.startTime ASC")
+        Page<EventEntity> findByHostPaginated(@Param("host") UserEntity host, Pageable pageable);
+        
+        @Query("SELECT e FROM EventEntity e WHERE (e.isDraft = false OR e.isDraft IS NULL) ORDER BY e.date ASC, e.startTime ASC")
+        Page<EventEntity> findAllPublishedEventsPaginated(Pageable pageable);
+        
+        @Query("SELECT e FROM EventEntity e WHERE (e.isDraft = false OR e.isDraft IS NULL) AND e.date >= :startDate AND e.date <= :endDate ORDER BY e.date ASC, e.startTime ASC")
+        Page<EventEntity> findPublishedEventsByDateRangePaginated(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate, Pageable pageable);
     }

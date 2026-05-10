@@ -5,6 +5,8 @@ import com.hangout.app.notification.repository.NotificationRepository;
 import com.hangout.app.user.entity.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -29,6 +31,7 @@ public class NotificationService {
      * Safe to call from any service; logs errors so notification
      * failures can be debugged without breaking the main action.
      */
+    @CacheEvict(value = {"userNotifications", "unreadNotifications"}, key = "#user.email", beforeInvocation = false)
     public void create(UserEntity user,
                        String type,
                        String title,
@@ -93,6 +96,8 @@ public class NotificationService {
                 return user.getNotifEventDeleted() != null && user.getNotifEventDeleted();
             case "SEAT_ASSIGNED":
                 return user.getNotifSeatAssigned() != null && user.getNotifSeatAssigned();
+            case "EVENT_REMINDER":
+                return true;
             default:
                 return true; // Unknown types are allowed
         }
@@ -100,6 +105,7 @@ public class NotificationService {
 
     // ── REST-facing methods ───────────────────────────────────────────────────
 
+    @Cacheable(value = "userNotifications", key = "#email")
     public List<Map<String, Object>> getNotifications(String email) {
         UserEntity user = findUserOrThrow(email);
         return notificationRepository
@@ -109,12 +115,14 @@ public class NotificationService {
                 .collect(Collectors.toList());
     }
 
+    @Cacheable(value = "unreadNotifications", key = "#email")
     public Map<String, Object> getUnreadCount(String email) {
         UserEntity user = findUserOrThrow(email);
         long count = notificationRepository.countByUserAndIsRead(user, false);
         return Map.of("unreadCount", count);
     }
 
+    @CacheEvict(value = {"userNotifications", "unreadNotifications"}, key = "#email", beforeInvocation = false)
     @Transactional
     public Map<String, Object> markRead(String email, Long notificationId) {
         UserEntity user = findUserOrThrow(email);
@@ -131,6 +139,7 @@ public class NotificationService {
     }
 
     @Transactional
+    @CacheEvict(value = {"userNotifications", "unreadNotifications"}, key = "#email", beforeInvocation = false)
     public Map<String, Object> markAllRead(String email) {
         UserEntity user = findUserOrThrow(email);
         notificationRepository.markAllReadForUser(user);
@@ -139,6 +148,7 @@ public class NotificationService {
     }
 
     @Transactional
+    @CacheEvict(value = {"userNotifications", "unreadNotifications"}, key = "#email", beforeInvocation = false)
     public Map<String, Object> deleteNotification(String email, Long notificationId) {
         UserEntity user = findUserOrThrow(email);
         NotificationEntity n = notificationRepository.findById(notificationId)
@@ -150,6 +160,7 @@ public class NotificationService {
     }
 
     @Transactional
+    @CacheEvict(value = {"userNotifications", "unreadNotifications"}, key = "#email", beforeInvocation = false)
     public Map<String, Object> deleteAll(String email) {
         UserEntity user = findUserOrThrow(email);
         notificationRepository.deleteAllByUser(user);

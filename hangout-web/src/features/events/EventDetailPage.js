@@ -878,6 +878,7 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
   const isDraft     = displayEvent.isDraft === true;
   const eventStatus = displayEvent.eventStatus || 'active';
   const isCompleted = eventStatus === 'completed' || (!isDraft && hasEventPassed(displayEvent));
+  const isEventStarted = !isDraft && hasEventStarted(displayEvent);
   const isEventCancelledOrDeleted = eventStatus === 'cancelled' || eventStatus === 'deleted';
   const eventStatusReason = displayEvent.eventStatusReason || '';
 
@@ -1006,34 +1007,32 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
 
   function hasEventPassed(eventData) {
     if (!eventData?.date) return false;
-    const dateStr = eventData.date;
-    let eventDate = new Date(dateStr);
-    if (isNaN(eventDate.getTime())) {
-      eventDate = new Date(Date.parse(dateStr));
+    // Construct end datetime: use endTime if available, otherwise use startTime, otherwise 23:59
+    let endDateTime;
+    if (eventData.endTime) {
+      endDateTime = new Date(`${eventData.date} ${eventData.endTime}`);
+    } else if (eventData.startTime) {
+      endDateTime = new Date(`${eventData.date} ${eventData.startTime}`);
+    } else {
+      endDateTime = new Date(`${eventData.date} 23:59`);
     }
-    if (isNaN(eventDate.getTime())) return false;
+    
+    // Check if the end datetime is before now
+    return endDateTime < new Date();
+  }
 
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const eventDayStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-
-    if (eventDayStart < todayStart) {
-      return true;
+  function hasEventStarted(eventData) {
+    if (!eventData?.date) return false;
+    // Construct start datetime using startTime if available, otherwise use date at 00:00
+    let startDateTime;
+    if (eventData.startTime) {
+      startDateTime = new Date(`${eventData.date} ${eventData.startTime}`);
+    } else {
+      startDateTime = new Date(`${eventData.date} 00:00`);
     }
-
-    if (eventDayStart.getTime() === todayStart.getTime()) {
-      if (eventData.endTime) {
-        const endDateTime = new Date(`${eventDate.toISOString().slice(0, 10)}T${eventData.endTime}`);
-        return endDateTime < new Date();
-      }
-      if (eventData.startTime) {
-        const startDateTime = new Date(`${eventDate.toISOString().slice(0, 10)}T${eventData.startTime}`);
-        return startDateTime < new Date();
-      }
-      return false;
-    }
-
-    return false;
+    
+    // Check if the start datetime is in the past (event has started)
+    return startDateTime <= new Date();
   }
 
   const timeLabel = getTimeLabel(displayEvent);
@@ -1496,6 +1495,24 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
             <CheckCircle2 size={20} /> HangOut Completed
           </button>
         </div>
+      ) : isEventStarted && !rsvped ? (
+        <div className={s.rsvpBar}>
+          <div className={s.rsvpInfo}>
+            <div>
+              <p className={s.rsvpPrice}>{isPaid ? `₱${event.price}` : 'Free'}</p>
+              <p className={s.rsvpSeats}>
+                This HangOut has already started. RSVPs are no longer being accepted.
+              </p>
+            </div>
+          </div>
+          <button
+            className={`${s.rsvpBtn} ${s.rsvpBtnCompleted}`}
+            disabled
+            style={{ cursor: 'not-allowed' }}
+          >
+            <Clock size={20} /> HangOut In Progress
+          </button>
+        </div>
       ) : isEventCancelledOrDeleted ? (
         <div className={s.rsvpBar}>
           <div className={s.rsvpInfo}>
@@ -1578,7 +1595,7 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
                 setRsvpLoading(false);
               }
             }}
-            disabled={rsvpLoading || isRefundInProgress || (seatsLeft === 0 && !rsvped) || paymentStatus === 'pending'}
+            disabled={rsvpLoading || isRefundInProgress || (seatsLeft === 0 && !rsvped) || paymentStatus === 'pending' || (isEventStarted && !rsvped)}
           >
             {isRefundInProgress
               ? <><RefreshCcw size={20} /> Refund In Progress</>

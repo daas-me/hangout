@@ -8,6 +8,8 @@ import com.hangout.app.notification.service.NotificationService;
 import com.hangout.app.user.entity.UserEntity;
 import com.hangout.app.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -53,6 +55,7 @@ public class RSVPService {
 
     // ── Create/Update RSVP ─────────────────────────────────────────────────────
 
+    @CacheEvict(value = {"attendingEvents", "eventAttendees"}, key = "#email", allEntries = true, beforeInvocation = false)
     public Map<String, Object> createOrUpdateRSVP(String email, Long eventId, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -205,7 +208,12 @@ public class RSVPService {
 
     // ── Get Attending Events (for current user) ─────────────────────────────────
 
+    @Cacheable(value = "attendingEvents", key = "#email")
     public List<Map<String, Object>> getAttendingEvents(String email) {
+        // Return empty list for unauthenticated users
+        if (email == null || email.trim().isEmpty()) {
+            return List.of();
+        }
         UserEntity user = findUserOrThrow(email);
         // Use findByUser which has JOIN FETCH to prevent N+1 queries
         List<RSVPEntity> rsvps = rsvpRepository.findByUser(user);
@@ -277,6 +285,7 @@ public class RSVPService {
 
     // ── Get Event Attendees (for host) ──────────────────────────────────────────
 
+    @Cacheable(value = "eventAttendees", key = "#eventId")
     public List<Map<String, Object>> getEventAttendees(String email, Long eventId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -294,6 +303,7 @@ public class RSVPService {
 
     // ── Approve Payment ────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "eventAttendees", key = "#eventId", beforeInvocation = false)
     public Map<String, Object> approvePayment(String email, Long eventId, Long rsvpId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -329,6 +339,7 @@ public class RSVPService {
 
     // ── Reject Payment ─────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "eventAttendees", key = "#eventId", beforeInvocation = false)
     public Map<String, Object> rejectPayment(String email, Long eventId, Long rsvpId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -393,6 +404,7 @@ public class RSVPService {
 
     // ── Reject Attendee ────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "eventAttendees", key = "#eventId", beforeInvocation = false)
     public Map<String, Object> rejectAttendee(String email, Long eventId, Long rsvpId, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -476,6 +488,7 @@ public class RSVPService {
 
     // ── Remove Attendee from List (Host removes from history) ────────────────────
 
+    @CacheEvict(value = "eventAttendees", key = "#eventId", beforeInvocation = false)
     public Map<String, Object> removeAttendeeFromHistory(String email, Long eventId, Long rsvpId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -501,6 +514,7 @@ public class RSVPService {
 
     // ── Remove Attendee from Attending List (Guest removes) ──────────────────────
 
+    @CacheEvict(value = {"attendingEvents", "eventAttendees"}, allEntries = true, beforeInvocation = false)
     public Map<String, Object> removeFromAttendingList(String email, Long eventId) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -579,6 +593,7 @@ public class RSVPService {
 
     // ── Approve Refund ─────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "eventAttendees", key = "#eventId", beforeInvocation = false)
     public Map<String, Object> approveRefund(String email, Long eventId, Long rsvpId, String refundProofUrl) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -611,6 +626,7 @@ public class RSVPService {
 
     // ── Reject Refund ─────────────────────────────────────────────────────────
 
+    @CacheEvict(value = "eventAttendees", key = "#eventId", beforeInvocation = false)
     public Map<String, Object> rejectRefund(String email, Long eventId, Long rsvpId, String rejectionReason) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
@@ -742,6 +758,10 @@ public class RSVPService {
     // ── Check RSVP Status ──────────────────────────────────────────────────────
 
     public Map<String, Object> checkRSVPStatus(String email, Long eventId) {
+        // Return not rsvped for unauthenticated users
+        if (email == null || email.trim().isEmpty()) {
+            return Map.of("rsvped", false);
+        }
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);
 

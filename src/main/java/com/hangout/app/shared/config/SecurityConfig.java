@@ -66,6 +66,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/events/discover").permitAll()
                 .requestMatchers("/api/events/location/search").permitAll()
                 .requestMatchers("/api/events/*").permitAll()
+                .requestMatchers("GET", "/api/events/*/rsvp/check").permitAll()
+                .requestMatchers("GET", "/api/events/attending").permitAll()
                 .requestMatchers("/api/events/*/rsvp/verify/*").permitAll()
                 .requestMatchers("/api/users/*/profile").permitAll()
                 .requestMatchers("/api/users/*/hosting-count").permitAll()

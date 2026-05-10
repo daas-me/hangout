@@ -84,6 +84,12 @@ public class RSVPEntity {
     @Column(name = "is_removed_by_host")
     private Boolean isRemovedByHost = false;
 
+    @Column(name = "reminder_24h_sent", nullable = false)
+    private Boolean reminder24hSent = false;
+
+    @Column(name = "reminder_1h_sent", nullable = false)
+    private Boolean reminder1hSent = false;
+
     // ── Getters & Setters ──────────────────────────────────────────────────────
 
     public Long getId() { return id; }
@@ -142,4 +148,10 @@ public class RSVPEntity {
     
     public Boolean getIsRemovedByHost() { return isRemovedByHost; }
     public void setIsRemovedByHost(Boolean isRemovedByHost) { this.isRemovedByHost = isRemovedByHost; }
+
+    public Boolean getReminder24hSent() { return reminder24hSent; }
+    public void setReminder24hSent(Boolean reminder24hSent) { this.reminder24hSent = reminder24hSent; }
+
+    public Boolean getReminder1hSent() { return reminder1hSent; }
+    public void setReminder1hSent(Boolean reminder1hSent) { this.reminder1hSent = reminder1hSent; }
 }
