@@ -12,7 +12,7 @@ import { STATUS_CONFIG } from '../../shared/config/statusConfig';
 import { NotificationModal } from '../../shared/components/NotificationModal';
 import s from '../../styles/MyHangOutsPage.module.css';
 
-const FRONTEND_BASE = process.env.REACT_APP_FRONTEND_BASE || 'http://localhost:3000';
+const FRONTEND_BASE = process.env.REACT_APP_FRONTEND_BASE || window.location.origin;
 
 // Formats "YYYY-MM-DD" → "May 06, 2026"
 const formatCardDate = (dateStr) => {

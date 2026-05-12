@@ -1,7 +1,7 @@
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { Calendar, Clock, MapPin, Ticket, User, Armchair, Download, Camera } from 'lucide-react';
 
-const FRONTEND_BASE = process.env.REACT_APP_FRONTEND_BASE || 'http://localhost:3000';
+const FRONTEND_BASE = process.env.REACT_APP_FRONTEND_BASE || window.location.origin;
 
 export function ETicket({ event, rsvp, guestName, onClose }) {
   const ticketNumber = rsvp?.ticketNumber || `TKT-${rsvp?.rsvpId || rsvp?.id}`;
