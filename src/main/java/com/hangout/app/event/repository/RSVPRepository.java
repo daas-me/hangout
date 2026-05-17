@@ -36,4 +36,7 @@ public interface RSVPRepository extends JpaRepository<RSVPEntity, Long> {
     @Query("SELECT COUNT(r) FROM RSVPEntity r WHERE r.event = :event AND r.status = :status AND (r.attendeeStatus IS NULL OR r.attendeeStatus != 'rejected')")
     Long countConfirmedExcludingRejected(@Param("event") EventEntity event, @Param("status") String status);
 
+    @Query("SELECT COUNT(r) FROM RSVPEntity r WHERE r.user = :user AND r.status = 'confirmed'")
+long countConfirmedByUser(@Param("user") UserEntity user);
+
 }

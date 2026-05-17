@@ -845,7 +845,7 @@ public class RSVPService {
     }
 
     // ── Assign Seat ────────────────────────────────────────────────────────────
-
+    @CacheEvict(value = "eventAttendees", key = "#eventId", beforeInvocation = false)
     public Map<String, Object> assignSeat(String email, Long eventId, Long rsvpId, Map<String, Object> body) {
         UserEntity user = findUserOrThrow(email);
         EventEntity event = findEventOrThrow(eventId);

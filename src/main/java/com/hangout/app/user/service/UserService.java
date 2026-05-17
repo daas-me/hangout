@@ -136,16 +136,18 @@ public class UserService {
     public Map<String, Object> getStats(String email) {
         UserEntity user = findUserOrThrow(email);
 
-        long hostingCount = eventRepository.countByHost(user);
+        long hostingCount = eventRepository.countPublishedByHost(user);
+        long attendingCount = rsvpRepository.countConfirmedByUser(user);
         int totalAttendees = eventRepository
             .findByHostOrderByDateAscStartTimeAsc(user)
             .stream()
+            .filter(e -> e.getIsDraft() == null || !e.getIsDraft())
             .mapToInt(e -> e.getAttendeeCount())
             .sum();
 
         return Map.of(
             "hostingCount",   hostingCount,
-            "attendingCount", 0,
+            "attendingCount", attendingCount,
             "totalAttendees", totalAttendees
         );
     }

@@ -355,6 +355,38 @@ export async function updateAttendanceStatus(eventId, rsvpId, attendanceStatus) 
   return data;
 }
 
+// Mark attendance during QR code ticket scanning
+export async function markAttendance(eventId, rsvpId) {
+  const headers = getAuthHeaders();
+  console.log(`[markAttendance] Marking attendance for event ${eventId}, RSVP ${rsvpId}`);
+  
+  const res = await fetch(`${API_BASE}/events/${eventId}/rsvp/${rsvpId}/attendance-status`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ attendanceStatus: 'attended' }),
+  });
+
+  if (!res.ok) {
+    let errorMsg = 'Failed to mark attendance';
+    try {
+      const data = await res.json();
+      errorMsg = data.message || errorMsg;
+    } catch (e) {
+      if (res.status === 403) errorMsg = 'You do not have permission to mark attendance for this event';
+      else if (res.status === 401) errorMsg = 'Authentication required. Please log in.';
+    }
+    console.error(`[markAttendance] Error (${res.status}): ${errorMsg}`);
+    throw new Error(`${errorMsg} (${res.status})`);
+  }
+
+  const data = await res.json();
+  console.log(`[markAttendance] Successfully marked attendance for RSVP ${rsvpId}`);
+  return data;
+}
+
 export async function assignSeat(eventId, rsvpId, seatNumber) {
   const headers = getAuthHeaders();
   console.log(`[assignSeat] Assigning seat "${seatNumber}" for event ${eventId}, RSVP ${rsvpId}`, {
