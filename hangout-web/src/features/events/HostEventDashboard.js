@@ -2,15 +2,16 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowLeft, Calendar, Clock, MapPin, Users, CheckCircle, X,
   Clock3, Edit, Share2, MoreVertical, BarChart3, TrendingUp,
-  AlertCircle, AlertTriangle, Download, Trash2, Eye, EyeOff, ImageOff, Image, MessageCircle, Check
+  AlertCircle, AlertTriangle, Download, Trash2, Eye, EyeOff, ImageOff, Image, MessageCircle, Check, Smartphone
 } from 'lucide-react';
 import { Modal } from '../../shared/components/Modal';
+import { QRScanner } from '../../shared/components/QRScanner';
 import s from '../../styles/HostEventDashboard.module.css';
 import { API_BASE, getAuthHeaders } from '../../shared/api/apiClient';
 import { calculateAge } from '../../shared/utils/ageCalculator';
 import {
   getEventAttendees, approvePayment, rejectPayment, rejectAttendee, updateAttendanceStatus,
-  unpublishEvent, deleteEvent as deleteEventApi, approveRefund, rejectRefund, assignSeat
+  unpublishEvent, deleteEvent as deleteEventApi, approveRefund, rejectRefund, assignSeat, markAttendance
 } from '../events/eventsApi';
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -488,6 +489,10 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
   const [rejectionReason, setRejectionReason]   = useState('');
   const [editingSeat, setEditingSeat]           = useState(null);
   const [savingSeat, setSavingSeat]             = useState(false);
+  const [showQRScanner, setShowQRScanner]       = useState(false);
+  const [qrScanStatus, setQrScanStatus]         = useState('idle'); // 'idle', 'scanning', 'processing', 'success', 'error'
+  const [qrScanError, setQrScanError]           = useState(null);
+  const [qrScanResult, setQrScanResult]         = useState(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -659,6 +664,65 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
       console.error(err);
     } finally {
       setSavingAttendanceId(null);
+    }
+  };
+
+  const handleQRScan = async (qrData) => {
+    console.log('[HostEventDashboard] QR scanned:', qrData);
+    setQrScanStatus('processing');
+    setQrScanError(null);
+
+    try {
+      // Extract ticket token from QR code
+      // QR code contains a URL like: http://localhost:3000/verify/eventId/ticketToken
+      let ticketToken = null;
+
+      if (qrData.includes('/verify/')) {
+        const parts = qrData.split('/verify/');
+        if (parts.length >= 2) {
+          const lastPart = parts[parts.length - 1];
+          ticketToken = lastPart.split('/')[1]; // Get the ticketToken part
+        }
+      } else if (qrData.startsWith('TKT-')) {
+        ticketToken = qrData;
+      }
+
+      if (!ticketToken) {
+        setQrScanError('Invalid QR code. Could not extract ticket information.');
+        setQrScanStatus('error');
+        return;
+      }
+
+      console.log('[HostEventDashboard] Extracted ticket token:', ticketToken);
+
+      // Extract rsvpId from ticket token (format: TKT-{rsvpId})
+      const rsvpId = ticketToken.replace('TKT-', '');
+      if (!rsvpId || isNaN(rsvpId)) {
+        setQrScanError('Invalid ticket format.');
+        setQrScanStatus('error');
+        return;
+      }
+
+      // Mark attendance
+      await markAttendance(event.id, rsvpId);
+
+      // Refresh attendees list
+      const updatedAttendees = await getEventAttendees(event.id);
+      setAttendees(updatedAttendees || []);
+
+      setQrScanResult({ ticketToken, rsvpId });
+      setQrScanStatus('success');
+      
+      // Auto-close modal after 2 seconds
+      setTimeout(() => {
+        setShowQRScanner(false);
+        setQrScanStatus('idle');
+        setQrScanResult(null);
+      }, 2000);
+    } catch (err) {
+      console.error('[HostEventDashboard] QR scan error:', err);
+      setQrScanError(err.message || 'Failed to process ticket. Please try again.');
+      setQrScanStatus('error');
     }
   };
 
@@ -940,6 +1004,11 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
                           <div className={`${s.actionCardIcon} ${s.actionCardIconBlue}`}><Share2 size={24} /></div>
                           <h3 className={s.actionCardTitle}>Share HangOut</h3>
                           <p className={s.actionCardDesc}>Promote on social media</p>
+                        </button>
+                        <button className={`${s.actionCard} ${s.actionCardGreen}`} onClick={() => { setShowQRScanner(true); setQrScanStatus('scanning'); }}>
+                          <div className={`${s.actionCardIcon} ${s.actionCardIconGreen}`}><Smartphone size={24} /></div>
+                          <h3 className={s.actionCardTitle}>Scan Ticket QR</h3>
+                          <p className={s.actionCardDesc}>Check in attendees with QR codes</p>
                         </button>
                       </div>
                     </div>
@@ -2070,6 +2139,9 @@ export default function HostEventDashboard({ event, onBack, onEditEvent, current
 
       {/* ── Unpublish modal ── */}
       <Modal isOpen={showUnpublishModal} title="Unpublish HangOut" message="Are you sure you want to unpublish this HangOut? It will become a draft and won't be visible to others." confirmText="Unpublish" cancelText="Cancel" isDanger={true} isLoading={unpublishing} onConfirm={confirmUnpublish} onCancel={() => setShowUnpublishModal(false)} />
+
+      {/* ── QR Scanner Modal ── */}
+      <QRScanner isOpen={showQRScanner} onClose={() => setShowQRScanner(false)} onScan={handleQRScan} eventId={event.id} />
     </div>
   );
 }

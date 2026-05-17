@@ -68,8 +68,10 @@ export async function fetchCalculatedActivityStats(refresh = false) {
     // Filter only published (non-draft) hosting events
     const publishedHostingCount = (hostingData || []).filter(e => e.isDraft !== true).length;
 
-    // Count attending events
-    const attendingCount = (attendingData || []).length;
+    // Count confirmed RSVP events
+    const attendingCount = (attendingData || []).filter(e => 
+      e.status === 'confirmed'
+    ).length;
 
     // Calculate total attendees: sum of attendee counts for all attending events
     const totalAttendees = (attendingData || []).reduce((sum, event) => {

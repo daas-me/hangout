@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   CheckCircle2, XCircle, Calendar,
-  MapPin, Armchair, Loader2
+  MapPin, Armchair, Loader2, Clock
 } from 'lucide-react';
+import { markAttendance } from './eventsApi';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
 
@@ -19,12 +20,44 @@ export default function TicketVerifyPage() {
   const [loading,  setLoading]  = useState(true);
   const [ticket,   setTicket]   = useState(null);
   const [error,    setError]    = useState(null);
+  const [isMarking, setIsMarking] = useState(false);
+  const [attendanceMarked, setAttendanceMarked] = useState(false);
+  const [markingError, setMarkingError] = useState(null);
+  const [checkInTime, setCheckInTime] = useState(null);
+
+  // Extract rsvpId from ticket token (format: TKT-{rsvpId})
+  const extractRsvpId = (token) => {
+    if (token && token.startsWith('TKT-')) {
+      return token.substring(4);
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (!eventId || !ticketToken) {
       setError('Invalid ticket URL.');
       setLoading(false);
       return;
+    }
+
+    // Mark attendance automatically after verification
+    async function markAttendanceForTicket(ticketData) {
+      setIsMarking(true);
+      setMarkingError(null);
+      try {
+        const rsvpId = extractRsvpId(ticketToken);
+        if (!rsvpId) throw new Error('Unable to extract RSVP ID from ticket');
+
+        await markAttendance(eventId, rsvpId);
+        setAttendanceMarked(true);
+        setCheckInTime(new Date());
+        console.log('[TicketVerifyPage] Attendance marked successfully');
+      } catch (err) {
+        console.error('[TicketVerifyPage] Failed to mark attendance:', err);
+        setMarkingError(err.message);
+      } finally {
+        setIsMarking(false);
+      }
     }
 
     async function verify() {
@@ -42,25 +75,35 @@ export default function TicketVerifyPage() {
 
         if (res.status === 404) {
           setError('Ticket not found. This ticket does not exist or has been removed.');
+          setLoading(false);
           return;
         }
         if (res.status === 400) {
           const data = await res.json().catch(() => ({}));
           setError(data.message || 'Invalid ticket format.');
+          setLoading(false);
           return;
         }
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           setError(data.message || `Verification failed (HTTP ${res.status}).`);
+          setLoading(false);
           return;
         }
 
         const data = await res.json();
         setTicket(data);
+        setLoading(false);
+
+        // Auto-mark attendance if authenticated and ticket is valid
+        if (token && data.valid && data.status === 'confirmed' &&
+            (data.paymentStatus === 'confirmed' || data.paymentStatus === null) &&
+            data.attendeeStatus !== 'rejected' && data.attendeeStatus !== 'attended') {
+          await markAttendanceForTicket(data);
+        }
       } catch (err) {
         console.error('[TicketVerifyPage] Network error:', err);
         setError('Unable to connect to the server. Please check your connection.');
-      } finally {
         setLoading(false);
       }
     }
@@ -80,7 +123,8 @@ export default function TicketVerifyPage() {
     ticket.valid &&
     ticket.status === 'confirmed' &&
     (ticket.paymentStatus === 'confirmed' || ticket.paymentStatus === null) &&
-    ticket.attendeeStatus !== 'rejected';
+    ticket.attendeeStatus !== 'rejected' &&
+    ticket.attendeeStatus !== 'attended';
 
   /* ── Layout shell ── */
   const page = {
@@ -113,6 +157,7 @@ export default function TicketVerifyPage() {
     const message = error || (() => {
       if (!ticket) return 'This ticket could not be verified.';
       if (ticket.attendeeStatus === 'rejected') return 'This attendee has been rejected by the host.';
+      if (ticket.attendeeStatus === 'attended') return 'Ticket is already invalid. This attendee has already checked in.';
       if (ticket.status === 'cancelled') return 'This RSVP has been cancelled.';
       if (ticket.paymentStatus === 'pending') return 'Payment for this ticket is still pending approval.';
       if (ticket.paymentStatus === 'rejected') return 'Payment was rejected. This ticket is not valid.';
@@ -174,16 +219,18 @@ export default function TicketVerifyPage() {
       <div style={{
         background: '#13131f',
         borderRadius: 20,
-        border: '1px solid rgba(16,185,129,0.3)',
+        border: attendanceMarked ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(16,185,129,0.3)',
         overflow: 'hidden',
         maxWidth: 460,
         width: '100%',
-        boxShadow: '0 0 60px rgba(16,185,129,0.1)',
+        boxShadow: attendanceMarked ? '0 0 60px rgba(16,185,129,0.3)' : '0 0 60px rgba(16,185,129,0.1)',
       }}>
 
-        {/* Green header strip */}
+        {/* Header - Green for checked in, regular for just verified */}
         <div style={{
-          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+          background: attendanceMarked 
+            ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+            : 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
           padding: '28px 32px',
           display: 'flex',
           alignItems: 'center',
@@ -202,16 +249,36 @@ export default function TicketVerifyPage() {
               color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 4px',
             }}>
-              ✓ Valid Ticket
+              {attendanceMarked ? '✓ Check-In Successful' : '✓ Valid Ticket'}
             </p>
             <h1 style={{
               color: 'white', fontFamily: 'Syne, sans-serif',
               fontWeight: 700, fontSize: 20, margin: 0, lineHeight: 1.2,
             }}>
-              {ticket.eventTitle}
+              {attendanceMarked ? 'Attendance Marked' : ticket.eventTitle}
             </h1>
           </div>
         </div>
+
+        {/* Check-in time (only show if attendance marked) */}
+        {attendanceMarked && checkInTime && (
+          <div style={{
+            padding: '16px 32px',
+            borderBottom: '1px dashed rgba(255,255,255,0.08)',
+            background: 'rgba(16,185,129,0.05)',
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <Clock size={16} style={{ color: '#10b981', flexShrink: 0 }} />
+            <div>
+              <p style={{ color: '#6b7280', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 1px' }}>
+                Check-In Time
+              </p>
+              <p style={{ color: '#e5e7eb', fontSize: 13, fontWeight: 500, margin: 0 }}>
+                {checkInTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Guest info */}
         <div style={{
@@ -259,6 +326,15 @@ export default function TicketVerifyPage() {
 
         {/* Status badges */}
         <div style={{ padding: '16px 32px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {attendanceMarked && (
+            <span style={{
+              padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+              background: 'rgba(16,185,129,0.15)', color: '#10b981',
+              border: '1px solid rgba(16,185,129,0.3)',
+            }}>
+              ✓ Attended
+            </span>
+          )}
           <span style={{
             padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
             background: 'rgba(16,185,129,0.15)', color: '#10b981',
@@ -277,13 +353,38 @@ export default function TicketVerifyPage() {
           )}
         </div>
 
-        <div style={{
-          padding: '12px 32px 24px',
-          color: '#4b5563', fontSize: 11, textAlign: 'center',
-          fontStyle: 'italic',
-        }}>
-          Scanned at entrance · HangOut Event System
-        </div>
+        {/* Marking status message */}
+        {isMarking && (
+          <div style={{
+            padding: '12px 32px 24px',
+            color: '#a855f7', fontSize: 11, textAlign: 'center',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}>
+            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+            Marking attendance...
+            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+
+        {markingError && (
+          <div style={{
+            padding: '12px 32px 24px',
+            color: '#fbbf24', fontSize: 11, textAlign: 'center',
+            fontStyle: 'italic',
+          }}>
+            Note: Attendance marking requires host authentication
+          </div>
+        )}
+
+        {!isMarking && !markingError && (
+          <div style={{
+            padding: '12px 32px 24px',
+            color: '#4b5563', fontSize: 11, textAlign: 'center',
+            fontStyle: 'italic',
+          }}>
+            {attendanceMarked ? 'Attendance verified · HangOut Event System' : 'Scanned at entrance · HangOut Event System'}
+          </div>
+        )}
       </div>
     </div>
   );
