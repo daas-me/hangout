@@ -810,8 +810,8 @@ function LocationPicker({ value, error, onChange }) {
     debounceRef.current = setTimeout(async () => {
       try {
         const token = localStorage.getItem('hangout_token');
-        const res   = await fetch(
-          `http://localhost:8080/api/events/location/search?q=${encodeURIComponent(q)}`,
+        const res = await fetch(
+          `${API_BASE}/events/location/search?q=${encodeURIComponent(q)}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         const data = await res.json();
