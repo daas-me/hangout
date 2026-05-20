@@ -6,6 +6,7 @@ import {
   TicketCheck, RefreshCcw
 } from 'lucide-react';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
+import { getLocationDisplay } from '../../shared/utils/locationFormatter';
 import { cancelRSVP, acknowledgeRefund, checkRSVPStatus } from '../events/eventsApi';
 import { ETicket } from '../../shared/components/ETicket';
 import { STATUS_CONFIG } from '../../shared/config/statusConfig';
@@ -493,7 +494,7 @@ export default function AttendingCard({ event, onViewDetails, onOpenEvent, onEve
             <div className={s.infoGrid}>
               <InfoItem icon={Calendar} label="Date"     value={formatCardDate(event.date)} />
               <InfoItem icon={Clock}    label="Time"     value={getTimeLabel(event)} />
-              <InfoItem icon={MapPin}   label="Location" value={truncLoc(event.location)} />
+              <InfoItem icon={MapPin}   label="Location" value={truncLoc(getLocationDisplay(event))} />
               {isPaidEvent && (
                 <InfoItem icon={PhilippinePeso} label="Amount" value={`₱${event.price}`} accent />
               )}

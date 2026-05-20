@@ -10,6 +10,7 @@ import { getHostingEvents, deleteEvent, getAttendingEvents } from '../home/homeA
 import { publishEvent } from '../events/eventsApi';
 import { getUserFavorites, removeFavorite, clearFavoriteCache } from '../events/favoriteApi';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
+import { getLocationDisplay } from '../../shared/utils/locationFormatter';
 import { STATUS_CONFIG } from '../../shared/config/statusConfig';
 import HostEventDashboard from '../events/HostEventDashboard';
 import AttendingEventDashboard from '../events/AttendingEventDashboard';
@@ -612,7 +613,7 @@ function HostingCard({ event, onDelete, onEdit, onView, onOpenEvent, onPublish, 
         <div className={s.infoGrid}>
           <InfoItem icon={Calendar}       label="Date"       value={formatCardDate(event.date)} />
           <InfoItem icon={Clock}          label="Time"       value={getTimeLabel(event)} />
-          <InfoItem icon={MapPin}         label="Location"   value={event.location?.length > 30 ? event.location.substring(0, 30) + '…' : event.location} />
+          <InfoItem icon={MapPin}         label="Location"   value={getLocationDisplay(event).substring(0, 30) + (getLocationDisplay(event).length > 30 ? '…' : '')} />
           <InfoItem icon={Users}          label="Attendees"  value={`${attendeeCurrent}/${attendeeMax}`} />
           <InfoItem icon={PhilippinePeso} label="Price"      value={event.price === 0 ? 'FREE' : `₱${event.price}`} accent />
         </div>

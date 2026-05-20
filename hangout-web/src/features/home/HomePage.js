@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navbar } from '../../shared/components/Navbar';
 import { Calendar, MapPin, Users, Flame, TrendingUp, Plus, Search, LayoutGrid, Tent, SunMoon, Clock } from 'lucide-react';
 import { getHostingEvents, getTodayEvents, getCalculatedActivityStats } from './homeApi';
+import { getLocationDisplay } from '../../shared/utils/locationFormatter';
 import s from '../../styles/HomePage.module.css';
 
 function isToday(dateStr) {
@@ -102,6 +103,7 @@ function normalise(event) {
     time:         timeDisplay,
     location:     event.location     || 'Location not set',
     format:       event.format       || '—',
+    virtualPlatform: event.virtualPlatform || '',
     imageUrl:     event.imageUrl     || null,
     isTrending:   event.isTrending   || false,
     price:        event.price        ?? 0,
@@ -361,7 +363,7 @@ function HostingCard({ event, onClick }) {
           </div>
           <div className={s.hostingMetaRow}>
             <MapPin style={{ width: 16, height: 16 }} />
-            <span className={s.hostingMetaText}>{event.location}</span>
+            <span className={s.hostingMetaText}>{getLocationDisplay(event)}</span>
           </div>
           <div className={s.hostingMetaRow}>
             <Users style={{ width: 16, height: 16 }} />
@@ -404,7 +406,7 @@ function TodayCard({ event, isFirst, onClick }) {
           </div>
           <div className={s.todayMetaItem}>
             <MapPin style={{ width: 14, height: 14 }} />
-            <span className={s.todayMetaText}>{event.location}</span>
+            <span className={s.todayMetaText}>{getLocationDisplay(event)}</span>
           </div>
         </div>
         <div className={s.todayFooter}>

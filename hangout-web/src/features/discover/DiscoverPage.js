@@ -4,6 +4,7 @@ import { Search, Calendar, MapPin, Users, Filter, Binoculars, Clock } from 'luci
 import { getDiscoverEvents } from './discoverApi';
 import { checkIsFavorite } from '../events/favoriteApi';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
+import { getLocationDisplay } from '../../shared/utils/locationFormatter';
 import { Modal } from '../../shared/components/Modal';
 import s from '../../styles/DiscoverPage.module.css';
 
@@ -239,7 +240,7 @@ function EventCard({ event, onClick }) {
           </div>
           <div className={s.metaRow}>
             <MapPin className={s.metaIcon} />
-            <span>{event.location}</span>
+            <span>{getLocationDisplay(event)}</span>
           </div>
           <div className={s.metaRow}>
             <Users className={s.metaIcon} />
