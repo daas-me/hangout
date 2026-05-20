@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createEvent, updateEvent } from './eventsApi';
+import { API_BASE } from '../../shared/api/apiClient';
 import { Navbar } from '../../shared/components/Navbar';
 import { Toast } from '../../shared/components/Toast';
 import {
@@ -561,7 +562,7 @@ export default function CreateEventPage({ user, onLogout, onNavigate, initialEve
                   <label className={s.fieldLabel}><CreditCard size={16} className={s.fieldIcon} /> PAYMENT METHOD</label>
                   <select className={s.input} value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)}>
                     <option value="gcash">GCash</option>
-                    <option value="paymaya">PayMaya</option>
+                    <option value="paymaya">Maya</option>
                     <option value="bank">Bank Transfer</option>
                   </select>
                 </div>

@@ -3,7 +3,7 @@ import {
   ArrowLeft, Calendar, Clock, MapPin, Users, Ticket,
   Tag, Armchair, CreditCard, Heart, Share2,
   CheckCircle2, ExternalLink, Edit, Trash2, Upload, Eye,
-  Lock, X, BarChart3, RefreshCcw, AlertTriangle, MessageCircle
+  Lock, X, BarChart3, RefreshCcw, AlertTriangle, MessageCircle, Laptop
 } from 'lucide-react';
 import s from '../../styles/EventDetail.module.css';
 import { Modal } from '../../shared/components/Modal';
@@ -13,6 +13,7 @@ import { PaymentVerificationModal } from '../../shared/components/PaymentVerific
 import { publishEvent, unpublishEvent, deleteEvent as deleteEventApi, getEventDetails, rsvpEvent, cancelRSVP, checkRSVPStatus, submitPaymentProof, acknowledgeRefund } from './eventsApi';
 import { addFavorite, removeFavorite, checkIsFavorite } from './favoriteApi';
 import { getTimeLabel } from '../../shared/utils/timeFormatter';
+import { hasVirtualLink } from '../../shared/utils/locationFormatter';
 import { getPublicUserProfile, getUserHostingCount } from '../profile/profileApi';
 import { calculateAge } from '../../shared/utils/ageCalculator';
 import HostEventDashboard from './HostEventDashboard';
@@ -1203,16 +1204,32 @@ export default function EventDetailPage({ event, onBack, currentUser, onEditEven
               </div>
             </div>
 
-            {/* Location */}
+            {/* Location / Virtual Platform */}
             {displayEvent.location && formatLabel !== 'Virtual' && (
               <div className={s.card}>
                 <MapPin size={18} className={s.cardIcon} />
                 <div>
                   <p className={s.cardLabel}>Location</p>
-                 <p className={s.cardValue}>{displayEvent.location}</p>
+                  <p className={s.cardValue}>{displayEvent.location}</p>
                   <a href={displayEvent.placeUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(displayEvent.location)}`} target="_blank" rel="noreferrer" className={s.mapLink}>
                     <ExternalLink size={14} /> Open in Maps
                   </a>
+                </div>
+              </div>
+            )}
+
+            {/* Virtual Platform for Virtual & Hybrid Events */}
+            {formatLabel !== 'In-Person' && displayEvent.virtualPlatform && (
+              <div className={s.card}>
+                <Laptop size={18} className={s.cardIcon} />
+                <div>
+                  <p className={s.cardLabel}>{formatLabel === 'Hybrid' ? 'Virtual Platform' : 'Platform'}</p>
+                  <p className={s.cardValue}>{displayEvent.virtualPlatform}</p>
+                  {hasVirtualLink(displayEvent) && (
+                    <a href={displayEvent.virtualLink} target="_blank" rel="noreferrer" className={s.mapLink}>
+                      <ExternalLink size={14} /> Join Meeting
+                    </a>
+                  )}
                 </div>
               </div>
             )}
